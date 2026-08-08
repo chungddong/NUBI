@@ -1,5 +1,6 @@
 .venv/
 .pio/
 .vscode/
+__pycache__/
 *.bin
 *.elf
