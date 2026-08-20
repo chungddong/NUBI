@@ -1,0 +1,19 @@
+Legacy long U-top bracket open-source FEA
+Model key: legacy_u
+STEP: D:\build123d\exports\cnc\휠마운트_cnc_M6.step
+Load: 800.0 N downward on axle seat
+Mesh target: 4.000 mm, quadratic C3D10 tetrahedra
+Elements: 29478
+Fixed nodes (four upper/lower U-arm rail-fastener hole walls): 1076
+Loaded axle-seat nodes: 401
+Force per loaded node: -1.995012469 N
+Material: AL6061-T6, E=68900 MPa, nu=0.330
+Reference yield strength: 276.0 MPa
+VTU point fields: E, ERROR, E_Mises, E_Principal, RF, S, S_Mises, S_Principal, U
+Max von Mises from VTU: 14.545849022948092 MPa
+Max displacement from VTU: 0.00921798647218287 mm
+Boundary model: rigid support on four upper/lower U-arm rail-fastener hole walls.
+Interpretation: comparative linear-static model; no bolt preload/contact/fatigue yet.
+FRD: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_800N_h4mm\legacy_u_bracket.frd
+VTU: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_800N_h4mm\legacy_u_bracket.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_800N_h4mm\stress_deformed_800N.png

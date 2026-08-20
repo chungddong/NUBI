@@ -1,0 +1,3 @@
+build123d==0.11.1
+ocp_vscode==4.0.0
+cq-editor==0.7.0

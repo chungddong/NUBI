@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  바퀴는 왜 항상 바깥으로 밀리나 — 젖힘 모멘트 설명 (인터랙티브)
+  브라우저에서 그냥 열면 된다. 외부 의존 없음.
+
+  숫자 출처:
+    팔 길이 53.7mm      parameters.AXLE_FLAT_Y0 - AXLE_FLAT_LENGTH/2
+    설계하중 800 N      parameters.DESIGN_W
+    레일 폭 30mm        parameters.EXTRUSION_W (3030)
+    너트 한계 1500 N    parameters._TNUT_PULLOUT[6.0] (보수 하한, 미실측)
+    변위/응력 3종       models/hoverboard_mount/output/fea/*
+                        tools/fea/structural_stress.py 로 재추출
+  형상이나 하중을 바꾸면 이 파일의 숫자도 손으로 맞춰야 한다.
+-->
+<title>바퀴는 왜 항상 바깥으로 밀리나</title>
+<style>
+:root{
+  --paper:#eef1f3; --panel:#fbfcfc; --ink:#14191d; --ink2:#5a656d; --ink3:#8b979f;
+  --rule:#ced7dc; --rule2:#e3eaee;
+  --load:#c1302a; --react:#14548f; --ok:#1b6f47; --warn:#a86a0c;
+  --steel:#c3cad3; --steel-e:#7b8794; --rail:#5d6570; --tire:#2b3136; --brass:#dda04a;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101519; --panel:#181f24; --ink:#e7edf0; --ink2:#98a6af; --ink3:#6d7d87;
+    --rule:#2b353c; --rule2:#212a30;
+    --load:#ef6259; --react:#5ea4e6; --ok:#48b37e; --warn:#d59a37;
+    --steel:#8e9aa5; --steel-e:#5d6a75; --rail:#454e57; --tire:#20262b; --brass:#b8802f;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101519; --panel:#181f24; --ink:#e7edf0; --ink2:#98a6af; --ink3:#6d7d87;
+  --rule:#2b353c; --rule2:#212a30;
+  --load:#ef6259; --react:#5ea4e6; --ok:#48b37e; --warn:#d59a37;
+  --steel:#8e9aa5; --steel-e:#5d6a75; --rail:#454e57; --tire:#20262b; --brass:#b8802f;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",
+    system-ui,-apple-system,"Segoe UI",sans-serif;
+  line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums}
+.wrap{max-width:1000px; margin:0 auto; padding:56px 24px 92px;
+  display:flex; flex-direction:column; gap:44px}
+header{display:flex; flex-direction:column; gap:13px}
+.eyebrow{font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink3); font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+h1{margin:0; font-size:clamp(30px,5vw,46px); line-height:1.12; letter-spacing:-.022em;
+  font-weight:750; text-wrap:balance}
+.lede{margin:0; font-size:18px; color:var(--ink2); max-width:62ch}
+.stage{background:var(--panel); border:1px solid var(--rule); border-radius:3px;
+  padding:24px}
+.figrow{display:grid; grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); gap:30px;
+  align-items:start}
+@media (max-width:780px){.figrow{grid-template-columns:1fr}}
+svg{width:100%; height:auto; display:block}
+.side{display:flex; flex-direction:column; gap:22px}
+.ctl{display:flex; flex-direction:column; gap:9px}
+.ctl label{font-size:12px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--ink3); font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+input[type=range]{width:100%; accent-color:var(--load); height:26px; cursor:ew-resize}
+input[type=range]:focus-visible{outline:2px solid var(--react); outline-offset:3px}
+.scale{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink3)}
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px;
+  background:var(--rule); border:1px solid var(--rule); border-radius:3px; overflow:hidden}
+.tile{background:var(--panel); padding:13px 15px; display:flex; flex-direction:column; gap:2px}
+.tile .k{font-size:11px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink3);
+  font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+.tile .v{font-size:25px; font-weight:650; letter-spacing:-.02em}
+.tile .u{font-size:13px; color:var(--ink2); font-weight:400}
+.pill{display:inline-block; padding:2px 9px; border-radius:2px; font-size:12px;
+  font-weight:600; color:#fff; width:fit-content; margin-top:3px}
+.note{border-left:3px solid var(--warn); padding:3px 0 3px 15px; color:var(--ink2);
+  font-size:14.5px; line-height:1.65}
+h2{margin:0 0 4px; font-size:21px; letter-spacing:-.012em; font-weight:700}
+section{display:flex; flex-direction:column; gap:12px}
+p{margin:0; max-width:68ch; color:var(--ink2)}
+strong{color:var(--ink); font-weight:650}
+table{width:100%; border-collapse:collapse; font-size:14.5px}
+th,td{text-align:left; padding:11px 12px; border-bottom:1px solid var(--rule2)}
+th{font-size:11.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink3);
+  font-family:"Cascadia Mono",Consolas,ui-monospace,monospace; font-weight:500}
+td.n{text-align:right; font-family:"Cascadia Mono",Consolas,ui-monospace,monospace;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+th.r{text-align:right}
+.tblwrap{overflow-x:auto}
+footer{color:var(--ink3); font-size:12.5px; border-top:1px solid var(--rule);
+  padding-top:18px; line-height:1.75}
+#asm{transition:transform .1s linear}
+@media (prefers-reduced-motion:reduce){#asm{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">호버보드 휠 마운트 · 1:1 축척 단면</div>
+  <h1>바퀴는 왜 항상 바깥으로 밀리나</h1>
+  <p class="lede">차체가 누르는 힘과 노면이 미는 힘이 <strong>같은 선 위에 없다</strong>.
+  어긋난 거리만큼 브라켓을 젖히는 회전력이 생긴다. 슬라이더로 그 거리를 바꿔 보면
+  왜 이 차량에서는 그 값을 줄일 수 없는지가 보인다.</p>
+</header>
+
+<div class="stage">
+  <div class="figrow">
+    <svg id="fig" viewBox="-146 -104 220 226" role="img"
+         aria-label="바퀴와 프레임 브라켓의 단면도. 하중선과 지지선 사이 거리가 표시된다.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5"
+                markerHeight="4.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
+        </marker>
+      </defs>
+
+      <line id="grd" x1="-144" x2="72" y1="79.35" y2="79.35"
+            stroke="#8a6a3b" stroke-width="1.8"/>
+
+      <g id="asm">
+        <rect x="-27.5" y="-79.35" width="55" height="158.7" fill="var(--tire)"/>
+        <text x="0" y="34" text-anchor="middle" font-size="7.5" fill="#e9edf0"
+              font-family="monospace">바퀴</text>
+        <rect id="axl" y="-8" height="16" fill="var(--steel)" stroke="var(--steel-e)"
+              stroke-width="0.7"/>
+        <rect id="blk" y="-14.5" height="38.9" fill="var(--steel)"
+              stroke="var(--steel-e)" stroke-width="0.9"/>
+        <rect id="oem" y="-12.5" height="12.57" fill="var(--brass)"
+              stroke="#8a6420" stroke-width="0.7"/>
+      </g>
+
+      <rect id="ril" y="-44.5" width="30" height="30" fill="var(--rail)"
+            stroke="var(--ink)" stroke-width="0.8"/>
+      <text id="riltx" y="-27" text-anchor="middle" font-size="6.5" fill="#eef1f3"
+            font-family="monospace">3030</text>
+      <text id="riltx2" y="-19.5" text-anchor="middle" font-size="5.5" fill="#c2cbd2"
+            font-family="monospace">고정</text>
+
+      <g stroke-dasharray="6 4" stroke-width="1.1">
+        <line id="ldl" x1="0" x2="0" y1="-98" y2="100" stroke="var(--load)"/>
+        <line id="rcl" y1="-98" y2="100" stroke="var(--react)"/>
+      </g>
+      <text x="4" y="-88" font-size="7" fill="var(--load)" font-family="monospace">하중선</text>
+      <text id="lbl2" y="-88" font-size="7" fill="var(--react)" text-anchor="end"
+            font-family="monospace">지지선</text>
+
+      <line x1="0" x2="0" y1="76" y2="46" stroke="var(--load)" stroke-width="3"
+            marker-end="url(#ah)"/>
+      <text x="5" y="64" font-size="7" fill="var(--load)" font-family="monospace">800 N</text>
+      <line id="rca" y1="-74" y2="-50" stroke="var(--react)" stroke-width="3"
+            marker-end="url(#ah)"/>
+      <text id="rctx" y="-78" font-size="7" fill="var(--react)" text-anchor="middle"
+            font-family="monospace">800 N</text>
+
+      <line id="dl" y1="96" y2="96" stroke="var(--ink)" stroke-width="1.2"
+            marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <text id="dtx" y="110" text-anchor="middle" font-size="9.5" font-weight="700"
+            fill="var(--ink)" font-family="monospace"></text>
+    </svg>
+
+    <div class="side">
+      <div class="ctl">
+        <label for="arm">팔 길이 — 하중선에서 지지선까지</label>
+        <input id="arm" type="range" min="0" max="90" step="0.1" value="53.7">
+        <div class="scale mono"><span>0</span><span>실제 53.7</span><span>90 mm</span></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><span class="k">팔 길이</span>
+          <span class="v mono"><span id="v-arm">53.7</span><span class="u"> mm</span></span></div>
+        <div class="tile"><span class="k">젖히는 힘</span>
+          <span class="v mono" style="color:var(--load)"><span id="v-m">43</span><span class="u"> N·m</span></span></div>
+        <div class="tile"><span class="k">볼트 1개 인발</span>
+          <span class="v mono"><span id="v-b">1432</span><span class="u"> N</span></span></div>
+        <div class="tile"><span class="k">너트 한계 대비</span>
+          <span class="v mono"><span id="v-p">95</span><span class="u"> %</span></span>
+          <span id="v-pill" class="pill"></span></div>
+      </div>
+      <div id="feas" class="note"></div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <h2>줄일 수 없는 이유</h2>
+  <p>팔 길이는 브라켓 설계로 정하는 값이 아니라 <strong>바퀴 자체의 폭이 정한다</strong>.
+  타이어 중심에서 바깥으로 나가려면 최소한 타이어 반폭 27.5 mm 를 지나야 하고, 거기에
+  클램프 반두께 23.3 mm 가 더 붙는다. 합이 50.8 mm — 지금 값 53.7 mm 는 기하학적
+  하한보다 <strong>2.9 mm</strong> 위에 있을 뿐이다. 클램프를 모터 하우징에 닿기 직전까지
+  밀어도 50.3 mm 이고, 젖히는 힘은 43 → 40 N·m 로 6% 줄어든다. 이 축으로는 더
+  짜낼 게 없다.</p>
+</section>
+
+<section>
+  <h2>그래서 바꿀 수 있는 건 이것</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>방법</th><th>무엇이 달라지나</th><th class="r">볼트 1개 부담</th></tr></thead>
+    <tbody>
+      <tr><td>지금 — 3030 밑면 볼트 2개</td><td>인발로 받는다</td><td class="n">1432 N</td></tr>
+      <tr><td>더 좋은 T너트로 교체</td><td>힘은 그대로, 한계가 올라간다</td><td class="n">1432 N</td></tr>
+      <tr><td>레일 옆면까지 물기</td><td>인발 → <strong>전단</strong>으로 바뀐다</td><td class="n">716 N</td></tr>
+      <tr><td>휠 마운트 구간만 3060</td><td>슬롯 2줄이 지레를 만든다</td><td class="n">430 N</td></tr>
+    </tbody>
+  </table></div>
+  <p>네 경우 모두 젖히는 힘 43 N·m 자체는 그대로다. 바뀌는 건 그 힘을
+  <strong>어느 경로로 흘려보내느냐</strong>뿐이다. 없앨 수는 없고, 잘 받아낼 수만 있다.</p>
+</section>
+
+<section>
+  <h2>실제로 얼마나 밀리나</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>형상 · 재료</th><th class="r">바깥 밀림</th><th class="r">구조응력</th>
+      <th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>부러진 구형 · PETG 출력</td><td class="n">2.16 mm</td><td class="n">44.4 MPa</td>
+        <td><span class="pill" style="background:var(--load)">파단</span></td></tr>
+      <tr><td>지금 것 · PETG 출력</td><td class="n">0.67 mm</td><td class="n">45.6 MPa</td>
+        <td><span class="pill" style="background:var(--warn)">한계</span></td></tr>
+      <tr><td>지금 것 · AL6061-T6</td><td class="n">0.02 mm</td><td class="n">45.3 MPa</td>
+        <td><span class="pill" style="background:var(--ok)">여유 6.1배</span></td></tr>
+    </tbody>
+  </table></div>
+  <p>세 경우 모두 팔 길이가 같으니 젖히는 힘도 같고, 응력도 거의 같다. 갈리는 건
+  <strong>얼마나 안 휘느냐</strong>와 <strong>재료가 그 응력을 견디느냐</strong>다.
+  구형이 부러진 건 응력이 한계였던 것에 더해 2.16 mm 나 휘어서 조립부가 계속
+  벌어졌기 때문이고, 알루미늄이 답인 이유는 같은 응력을 6배 여유로 받기 때문이다.</p>
+</section>
+
+<footer class="mono">CalculiX 선형 정적해석 · 800 N · 편심 55 mm · 3 mm C3D10 메쉬 ·
+반력 합 오차 1e-3 N<br>
+구조응력 = 강체 고정한 볼트 구멍 벽에서 3 mm 밖의 최댓값 (특이점 제외) ·
+볼트 프리로드와 접촉은 미포함</footer>
+</div>
+
+<script>
+(function(){
+  var W=800, RAILW=30, NUT=1500, WHEEL_HW=27.5, CLAMP_HD=23.3;
+  var MINF=WHEEL_HW+CLAMP_HD;
+  function $(id){return document.getElementById(id);}
+  var arm=$("arm");
+
+  function draw(a){
+    var cy=-a;
+    var axl=$("axl"), ax0=Math.min(cy-25.9,-78.6);
+    axl.setAttribute("x",ax0);
+    axl.setAttribute("width",Math.max(51.6,-27-ax0));
+    $("blk").setAttribute("x",cy-CLAMP_HD);
+    $("blk").setAttribute("width",2*CLAMP_HD);
+    $("oem").setAttribute("x",cy-19.61);
+    $("oem").setAttribute("width",39.22);
+    $("ril").setAttribute("x",cy-15);
+    $("riltx").setAttribute("x",cy);
+    $("riltx2").setAttribute("x",cy);
+    $("rcl").setAttribute("x1",cy); $("rcl").setAttribute("x2",cy);
+    $("rca").setAttribute("x1",cy); $("rca").setAttribute("x2",cy);
+    $("rctx").setAttribute("x",cy);
+    $("lbl2").setAttribute("x",cy-4);
+    $("dl").setAttribute("x1",cy); $("dl").setAttribute("x2",0);
+    $("dtx").setAttribute("x",cy/2);
+    $("dtx").textContent=a.toFixed(1)+" mm";
+    var tilt=Math.min(9,a*0.115);
+    $("asm").setAttribute("transform","rotate("+(-tilt)+" "+(cy+15)+" -14.5)");
+  }
+
+  function update(){
+    var a=parseFloat(arm.value);
+    var M=W*a/1000, B=W*a/(RAILW/2)/2, p=B/NUT*100;
+    draw(a);
+    $("v-arm").textContent=a.toFixed(1);
+    $("v-m").textContent=M.toFixed(0);
+    $("v-b").textContent=B.toFixed(0);
+    $("v-p").textContent=p.toFixed(0);
+    var pill=$("v-pill");
+    if(p<50){pill.textContent="여유"; pill.style.background="var(--ok)";}
+    else if(p<85){pill.textContent="주의"; pill.style.background="var(--warn)";}
+    else {pill.textContent="한계 초과"; pill.style.background="var(--load)";}
+    var f=$("feas");
+    if(a<MINF){
+      f.style.borderLeftColor="var(--load)";
+      f.innerHTML="<strong>이 값은 만들 수 없다.</strong> 타이어 반폭 27.5 + 클램프 반두께 23.3 = 최소 "
+        +MINF.toFixed(1)+" mm. 그보다 안으로 오면 바퀴가 클램프를 파고든다.";
+    }else if(a<56){
+      f.style.borderLeftColor="var(--ok)";
+      f.innerHTML="<strong>실현 가능한 최소 구간.</strong> 지금 설계값 53.7 mm 가 여기 있다. "
+        +"하한 "+MINF.toFixed(1)+" mm 까지 밀어붙여도 젖히는 힘은 6% 밖에 안 준다.";
+    }else{
+      f.style.borderLeftColor="var(--warn)";
+      f.innerHTML="<strong>팔이 길어지는 만큼 그대로 손해다.</strong> 프레임을 더 안쪽으로 "
+        +"좁히거나 바퀴를 더 바깥에 달면 이 구간으로 온다.";
+    }
+  }
+  arm.addEventListener("input",update);
+  update();
+})();
+</script>
+
+</body>
+</html>

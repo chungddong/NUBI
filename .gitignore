@@ -1,0 +1,38 @@
+# ── 버전관리 방침 ───────────────────────────────────────────────
+# **소스와 문서만 담는다.** 형상 파일은 스크립트로 다시 만들 수 있고,
+# 통째로 넣으면 저장소가 600MB 를 넘는다 (exports/robot_vacuum.step 하나가 131MB).
+# 예외: hoverboard_mount 의 제작용 산출물(STEP/STL/DXF/도면)은 발주에 그대로 쓰는
+# 확정본이라 남긴다 — 다 합쳐 6MB 밖에 안 된다.
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+
+# 외부 툴 바이너리 (460MB)
+tools/fea/calculix/
+tools/fea/calculix_*.zip
+tools/fea/gmsh_pyenv/
+tools/fea/python/
+
+# 생성 형상 (460MB) — models/*.py 를 실행하면 다시 나온다
+exports/
+
+# 남의 참조 STEP (130MB) — 출처가 따로 있고 우리가 만든 게 아니다
+refmodel/
+
+# FEA 중간 파일 — 케이스당 수십 MB. summary.txt / *.png / *.md 는 남긴다
+models/hoverboard_mount/output/fea/**/*.inp
+models/hoverboard_mount/output/fea/**/*.frd
+models/hoverboard_mount/output/fea/**/*.vtu
+models/hoverboard_mount/output/fea/**/*.dat
+models/hoverboard_mount/output/fea/**/*.sta
+models/hoverboard_mount/output/fea/**/*.cvg
+models/hoverboard_mount/output/fea/**/*.12d
+models/hoverboard_mount/output/fea/**/*.msh
+models/hoverboard_mount/output/fea/**/*.log
+
+# 뷰어 로그
+**/ocp-vscode-*.log
+*.tmp
+*.bak
