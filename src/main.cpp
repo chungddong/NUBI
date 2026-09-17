@@ -7,7 +7,7 @@
 // Type commands into the USB serial monitor at 115200:
 //
 //   s <n>   target speed, -MAX..MAX   (also: a bare number)
-//   t <n>   target steer, -MAX..MAX
+//   t <n>   target steer, -1000..1000 (not under the MAX clamp -- see below)
 //   x       stop now (also: a blank line)
 //   m <n>   raise/lower the MAX clamp, 0..1000
 //   l <n>   LED/state bits: 1=green 2=orange 4=red 8=up 16=down 32=batt3
@@ -20,16 +20,31 @@
 // The watchdog is opt-in because a human at a serial monitor sends nothing
 // while just watching. Automated hosts (tools/hoverctl.py) turn it on so that
 // a crashed GUI or a yanked USB cable cannot leave the wheel spinning.
+//
+// The board also raises its own Wi-Fi access point (AP_SSID below) with a
+// captive-portal control page: join the network with a phone and the page
+// opens by itself, or browse to http://192.168.4.1/. The page mirrors the
+// serial commands and has its own always-armed watchdog -- see the
+// "WiFi hotspot" section below. Serial control keeps working alongside it.
 
 #define _DEBUG
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 
 #include "util.h"
 #include "hoverserial.h"
 
-static const int PIN_RX = 16;  // ESP32 RX <- hoverboard TX
-static const int PIN_TX = 17;  // ESP32 TX -> hoverboard RX
+// Two master+slave pairs, one master per link. Plain-UART masters all talk
+// unprompted at ~10 Hz, so they cannot share a wire -- each gets its own UART.
+// GPIO25 stays reserved: it is the unconnected control pin the diagnostics
+// compare against.
+static const int PIN_RX = 16;   // link A: ESP32 RX <- master 1 TX (header 4)
+static const int PIN_TX = 17;   // link A: ESP32 TX -> master 1 RX (header 5)
+static const int PIN_RX2 = 26;  // link B: ESP32 RX <- master 2 TX (header 4)
+static const int PIN_TX2 = 27;  // link B: ESP32 TX -> master 2 RX (header 5)
 
 static const uint32_t BAUDRATE = 19200;
 static const uint32_t SEND_MILLIS = 100;    // command rate
@@ -37,26 +52,55 @@ static const uint32_t REPORT_MILLIS = 200;  // telemetry print rate
 
 // --- safety envelope -------------------------------------------------------
 // Start conservative. Raise MAX with the 'm' command once the wheel behaves.
-static const int MAX_CMD_BOOT = 400;      // |speed| and |steer| clamp at boot
+static const int MAX_CMD_BOOT = 400;      // |speed| clamp at boot
 static const int RAMP_PER_TICK = 20;      // per 100 ms -> ~2 s across the clamp
+// Steer is deliberately NOT under the speed clamp. In pwm mode the mainboard
+// maps steer to a wheel-speed ratio -- it can only slow the inner wheel, never
+// raise speed -- so full lock (+/-1000) is speed-safe, and capping it at the
+// clamp just makes turns weak. It also ramps faster: steering must respond.
+static const int MAX_STEER = 1000;
+static const int STEER_RAMP_PER_TICK = 100;  // per 100 ms -> full lock in ~1 s
+// Measured on the assembled frame 2026-08-12: positive iSteer turned it LEFT.
+// Flipped here so that positive steer = right turn on every interface (web,
+// serial 't', GUI) without each one needing its own invert.
+static const int STEER_SIGN = -1;
 static const uint32_t RX_TIMEOUT_MS = 500;  // telemetry gap that cuts the command
 static const uint32_t QUIET_MS = 2000;    // listen-only settle time after reset
 static const uint32_t HOST_TIMEOUT_MS = 1000;  // host silence that cuts it, if armed
 
-HardwareSerial oSerialHover(2);
+HardwareSerial oSerialHover(2);   // link A (master 1)
+HardwareSerial oSerialHover2(1);  // link B (master 2)
 SerialHover2Server oFb;
+SerialHover2Server oFb2;
 
 static int iMaxCmd = MAX_CMD_BOOT;
 static int iSpeedTarget = 0, iSteerTarget = 0;
 static int iSpeedNow = 0, iSteerNow = 0;
 static uint8_t wState = 32;  // Battery3Led; never set 64 (Disable) or 128 (ShutOff)
 
-static unsigned long iNextSend = 0, iNextReport = 0, iLastRxAt = 0;
+static unsigned long iNextSend = 0, iNextReport = 0, iLastRxAt = 0, iLastRxAt2 = 0;
 static bool bCut = false;
 
 static bool bWatchdog = false;      // armed by the host with 'w 1'
 static bool bHostLost = false;
 static unsigned long iLastHostAt = 0;
+
+// --- WiFi hotspot ------------------------------------------------------------
+// WPA2 needs 8+ characters. Anyone holding this password can drive the wheel,
+// so change it before taking the thing outside.
+static const char *AP_SSID = "hoverwheel";
+static const char *AP_PASS = "********";
+static const uint32_t WEB_TIMEOUT_MS = 1000;  // web-client silence that cuts it
+
+static WebServer oWeb(80);
+static DNSServer oDns;
+
+// Web handlers run from oWeb.handleClient() inside loop(), and stamp their
+// liveness with loop()'s timestamp -- NOT a fresh millis(), for the same
+// unsigned-wrap reason documented at PollConsole().
+static unsigned long g_iNow = 0;
+static unsigned long iLastWebAt = 0;
+static bool bWebActive = false;  // armed by the first web command
 
 // One-shot diagnostic. With the status LEDs unpopulated there is no other way
 // to observe whether the mainboard accepts our frames: nothing it reports back
@@ -70,7 +114,7 @@ static uint8_t iShutoffFrames = 0;
 // whether or not the hoverboard is talking, so it is NOT evidence of life --
 // a host must watch this counter advance instead. Getting that wrong once
 // already produced a confident, entirely fictional test result.
-static uint32_t iRxFrames = 0;
+static uint32_t iRxFrames = 0, iRxFrames2 = 0;
 
 static void Diagnose();     // defined below, next to their helpers
 static void TryFormats();
@@ -104,7 +148,7 @@ static void HandleLine(char *s) {
       Serial.printf("speed -> %d\n", iSpeedTarget);
       break;
     case 't':
-      iSteerTarget = CLAMP(arg, -iMaxCmd, iMaxCmd);
+      iSteerTarget = CLAMP(arg, -MAX_STEER, MAX_STEER);
       Serial.printf("steer -> %d\n", iSteerTarget);
       break;
     case 'x':
@@ -113,7 +157,6 @@ static void HandleLine(char *s) {
     case 'm':
       iMaxCmd = CLAMP(arg, 0, 1000);
       iSpeedTarget = CLAMP(iSpeedTarget, -iMaxCmd, iMaxCmd);
-      iSteerTarget = CLAMP(iSteerTarget, -iMaxCmd, iMaxCmd);
       Serial.printf("max -> %d\n", iMaxCmd);
       break;
     case 'l':
@@ -173,6 +216,242 @@ static void PollConsole(unsigned long iNow) {
       aLine[iLen++] = c;
     }
   }
+}
+
+// --- WiFi hotspot + captive-portal control page ------------------------------
+// The page is a landscape button pad: steer buttons on the left half,
+// throttle buttons on the right, STOP in the middle. Hold to drive, release
+// to zero that axis -- commands are edge-triggered (press/release), so there
+// is no rate-limiter queue for a stop to lose against; a 300 ms repeater
+// re-sends the *current* intent only, which after a stop is zero.
+//
+// Steer mixing happens on the master mainboard and, in pwm mode
+// (DRIVING_MODE 0), it is multiplicative: steer sets the left/right speed
+// RATIO (upstream main.c maps steer to an angle and scales one wheel by a
+// lookup factor). Steer with zero speed moves nothing -- pivot turns are
+// impossible with this binary -- so the UI pairs steer buttons with throttle
+// buttons instead of pretending a joystick X axis works on its own.
+static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>hoverwheel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#14161a;color:#e8e8e8;font:14px/1.4 system-ui,sans-serif;user-select:none;-webkit-user-select:none;overflow:hidden}
+#wrap{display:flex;gap:10px;height:100%;padding:10px}
+.cluster{flex:1;display:flex;gap:10px}
+#steer{flex-direction:row}
+#throttle{flex-direction:column}
+.btn{flex:1;border:0;border-radius:16px;background:#23262d;color:#e8e8e8;font-size:36px;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.btn small{font-size:13px;color:#9aa0a6}
+.btn.on{background:#2f6fb4}
+.btn.on small{color:#dbeaff}
+#mid{width:240px;flex:none;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{font-size:15px;font-weight:600}
+#link{font-size:11px;padding:2px 8px;border-radius:10px;background:#2a2d33;color:#9aa0a6}
+#link.ok{background:#123a24;color:#7ee2a8}
+#link.warn{background:#3d2f10;color:#f0c36d}
+#link.bad{background:#3d1512;color:#f1948a}
+#hint{display:none}
+@media (orientation:portrait){#hint{display:block;text-align:center;background:#3d2f10;color:#f0c36d;border-radius:8px;padding:5px;font-size:12px}}
+.tele{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.tele div{background:#1d2026;border-radius:6px;padding:4px 2px;text-align:center}
+.tele b{display:block;font-size:13px;font-variant-numeric:tabular-nums}
+.tele span{font-size:9px;color:#9aa0a6}
+#cmds{display:flex;justify-content:space-around;font-size:15px;font-variant-numeric:tabular-nums;color:#9aa0a6}
+#cmds b{color:#e8e8e8}
+#stop{background:#c0392b;font-size:20px;font-weight:700;border:0;border-radius:12px;color:#fff;padding:16px}
+.row{display:flex;gap:10px;align-items:center;font-size:12px;color:#9aa0a6;flex-wrap:wrap}
+select,.row input[type=number]{background:#1d2026;border:1px solid #333;border-radius:6px;color:#e8e8e8;padding:4px;font-size:13px}
+.row input[type=number]{width:64px}
+.note{font-size:11px;color:#565c66}
+</style></head><body>
+<div id="wrap">
+<div class="cluster" id="steer">
+<button class="btn" id="bl">&#9664;<small>좌</small></button>
+<button class="btn" id="br">&#9654;<small>우</small></button>
+</div>
+<div id="mid">
+<header><h1>hoverwheel</h1><span id="link">connecting</span></header>
+<div id="hint">가로 화면 권장</div>
+<div class="tele">
+<div><b id="s1l">--</b><span>①좌 km/h</span></div>
+<div><b id="s1r">--</b><span>①우 km/h</span></div>
+<div><b id="s2l">--</b><span>②좌 km/h</span></div>
+<div><b id="s2r">--</b><span>②우 km/h</span></div>
+<div><b id="volt">--</b><span>V</span></div>
+<div><b id="a1">--</b><span>①A</span></div>
+<div><b id="a2">--</b><span>②A</span></div>
+<div><b id="rx">--</b><span>rx ①/②</span></div>
+</div>
+<div id="cmds"><span>S <b id="sval">0</b></span><span>T <b id="tval">0</b></span></div>
+<button id="stop">STOP</button>
+<div class="row">
+<label>속도 <select id="sp"><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option></select></label>
+<label>조향 <select id="sg"><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option></select></label>
+</div>
+<div class="row">
+<label><input id="ivs" type="checkbox"> 속도 반전</label>
+<label><input id="ivt" type="checkbox"> 조향 반전</label>
+</div>
+<div class="row"><span>max</span><input id="mx" type="number" min="0" max="1000" step="50" value="400"><button id="mxset">set</button></div>
+<div class="note">조향은 주행 중에만 듣습니다 — 전진/후진을 누른 채 좌/우를 함께 누르세요. 조향 %는 풀 조향각(안쪽 바퀴 정지) 기준이며 속도 클램프와 무관합니다</div>
+</div>
+<div class="cluster" id="throttle">
+<button class="btn" id="bf">&#9650;<small>전진</small></button>
+<button class="btn" id="bb">&#9660;<small>후진</small></button>
+</div>
+</div>
+<script>
+var $=function(i){return document.getElementById(i)};
+var S=0,T=0,curMax=400;
+function q(u){fetch(u).catch(function(){})}
+function push(){q('/api/cmd?s='+S+'&t='+T)}
+function lab(){$('sval').textContent=S;$('tval').textContent=T}
+function opt(k,d){var v=localStorage.getItem(k);return v===null?d:v}
+$('sp').value=opt('sp','0.5');$('sg').value=opt('sg','0.75');
+$('ivs').checked=opt('ivs','0')==='1';$('ivt').checked=opt('ivt','0')==='1';
+$('sp').onchange=function(){localStorage.setItem('sp',this.value)};
+$('sg').onchange=function(){localStorage.setItem('sg',this.value)};
+$('ivs').onchange=function(){localStorage.setItem('ivs',this.checked?'1':'0')};
+$('ivt').onchange=function(){localStorage.setItem('ivt',this.checked?'1':'0')};
+function spVal(){return Math.round(curMax*parseFloat($('sp').value)/10)*10*($('ivs').checked?-1:1)}
+function stVal(){return Math.round(1000*parseFloat($('sg').value)/10)*10*($('ivt').checked?-1:1)}
+function bind(id,set,clear){
+ var b=$(id);
+ b.addEventListener('pointerdown',function(e){try{b.setPointerCapture(e.pointerId)}catch(_){}b.classList.add('on');set();lab();push()});
+ function up(){b.classList.remove('on');clear();lab();push()}
+ b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);
+}
+bind('bf',function(){S=spVal()},function(){S=0});
+bind('bb',function(){S=-spVal()},function(){S=0});
+bind('bl',function(){T=-stVal()},function(){T=0});
+bind('br',function(){T=stVal()},function(){T=0});
+function clr(){['bf','bb','bl','br'].forEach(function(i){$(i).classList.remove('on')})}
+function stop(){S=0;T=0;clr();lab();q('/api/stop')}
+$('stop').addEventListener('click',stop);
+var KEYS={ArrowUp:['bf'],ArrowDown:['bb'],ArrowLeft:['bl'],ArrowRight:['br']};
+var kact={};
+window.addEventListener('keydown',function(e){
+ if(e.key===' '||e.key==='Escape'){stop();return}
+ var k=KEYS[e.key];if(!k||e.repeat||kact[e.key])return;kact[e.key]=1;
+ $(k[0]).dispatchEvent(new PointerEvent('pointerdown'));
+});
+window.addEventListener('keyup',function(e){
+ var k=KEYS[e.key];if(!k)return;kact[e.key]=0;
+ $(k[0]).dispatchEvent(new PointerEvent('pointerup'));
+});
+$('mxset').addEventListener('click',function(){q('/api/max?v='+(+$('mx').value||0))});
+setInterval(function(){q('/api/ping')},250);
+setInterval(function(){if(S||T)push()},300);
+var pRx=-1,pRx2=0,pT=0;
+function poll(){fetch('/api/status').then(function(r){return r.json()}).then(function(j){
+ if(j.max!==curMax){curMax=j.max;if(document.activeElement!==$('mx'))$('mx').value=j.max}
+ $('s1l').textContent=(j.spdL/100).toFixed(2);
+ $('s1r').textContent=(j.spdR/100).toFixed(2);
+ $('s2l').textContent=(j.spdL2/100).toFixed(2);
+ $('s2r').textContent=(j.spdR2/100).toFixed(2);
+ $('volt').textContent=(j.volt/100).toFixed(1);
+ $('a1').textContent=((Math.abs(j.ampL)+Math.abs(j.ampR))/100).toFixed(1);
+ $('a2').textContent=((Math.abs(j.ampL2)+Math.abs(j.ampR2))/100).toFixed(1);
+ var t=Date.now(),el=$('link');
+ if(pRx>=0&&t>pT){
+  var dt=t-pT,f1=(j.rx-pRx)*1000/dt,f2=(j.rx2-pRx2)*1000/dt;
+  $('rx').textContent=f1.toFixed(0)+'/'+f2.toFixed(0);
+  if(f1>=8&&(j.rx2===0||f2>=8)){el.textContent='link clean';el.className='ok'}
+  else if(f1>=1||f2>=1){el.textContent='DROPOUTS';el.className='warn'}
+  else{el.textContent='board silent';el.className='bad'}}
+ pRx=j.rx;pRx2=j.rx2;pT=t;
+ if(j.cut){el.textContent='CUT: no telemetry';el.className='bad'}
+}).catch(function(){var el=$('link');el.textContent='no connection';el.className='bad'})}
+setInterval(poll,400);poll();
+</script></body></html>
+)HTML";
+
+static void WebRoot() {
+  iLastWebAt = g_iNow;
+  oWeb.send_P(200, "text/html", PAGE_HTML);
+}
+
+// Every URL we do not serve redirects to the control page. Phones probe a
+// known URL right after joining (generate_204, hotspot-detect.html, ...);
+// getting a redirect instead of the expected answer is what makes them pop
+// the captive-portal sheet. The DNS server resolves every name to us, so the
+// probe is guaranteed to land here.
+static void WebPortal() {
+  oWeb.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
+  oWeb.send(302, "text/plain", "");
+}
+
+// Commands (and only commands) arm the web watchdog: watching telemetry from
+// the page must not make the firmware treat that phone as the operator.
+static void WebCmd() {
+  iLastWebAt = g_iNow;
+  bWebActive = true;
+  if (oWeb.hasArg("s")) iSpeedTarget = CLAMP((int)oWeb.arg("s").toInt(), -iMaxCmd, iMaxCmd);
+  if (oWeb.hasArg("t")) iSteerTarget = CLAMP((int)oWeb.arg("t").toInt(), -MAX_STEER, MAX_STEER);
+  oWeb.send(200, "text/plain", "ok");
+}
+
+static void WebStop() {
+  iLastWebAt = g_iNow;
+  bWebActive = true;
+  StopNow("web");
+  oWeb.send(200, "text/plain", "ok");
+}
+
+static void WebPing() {
+  iLastWebAt = g_iNow;
+  oWeb.send(200, "text/plain", "ok");
+}
+
+static void WebMax() {
+  iLastWebAt = g_iNow;
+  if (oWeb.hasArg("v")) {
+    iMaxCmd = CLAMP((int)oWeb.arg("v").toInt(), 0, 1000);
+    iSpeedTarget = CLAMP(iSpeedTarget, -iMaxCmd, iMaxCmd);
+    Serial.printf("max -> %d (web)\n", iMaxCmd);
+  }
+  oWeb.send(200, "text/plain", "ok");
+}
+
+static void WebStatus() {
+  iLastWebAt = g_iNow;
+  char aBuf[320];
+  snprintf(aBuf, sizeof(aBuf),
+           "{\"s\":%d,\"t\":%d,\"max\":%d,"
+           "\"spdL\":%d,\"spdR\":%d,\"volt\":%d,\"ampL\":%d,\"ampR\":%d,\"rx\":%lu,"
+           "\"spdL2\":%d,\"spdR2\":%d,\"volt2\":%d,\"ampL2\":%d,\"ampR2\":%d,\"rx2\":%lu,"
+           "\"cut\":%d}",
+           iSpeedTarget, iSteerTarget, iMaxCmd,
+           (int)oFb.iSpeedL, (int)oFb.iSpeedR, (int)oFb.iVolt,
+           (int)oFb.iAmpL, (int)oFb.iAmpR, (unsigned long)iRxFrames,
+           (int)oFb2.iSpeedL, (int)oFb2.iSpeedR, (int)oFb2.iVolt,
+           (int)oFb2.iAmpL, (int)oFb2.iAmpR, (unsigned long)iRxFrames2,
+           bCut ? 1 : 0);
+  oWeb.send(200, "application/json", aBuf);
+}
+
+static void WebSetup() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID, AP_PASS);
+  delay(100);  // softAPIP() is not valid immediately after softAP()
+
+  oDns.start(53, "*", WiFi.softAPIP());
+
+  oWeb.on("/", WebRoot);
+  oWeb.on("/api/cmd", WebCmd);
+  oWeb.on("/api/stop", WebStop);
+  oWeb.on("/api/ping", WebPing);
+  oWeb.on("/api/max", WebMax);
+  oWeb.on("/api/status", WebStatus);
+  oWeb.onNotFound(WebPortal);
+  oWeb.begin();
+
+  Serial.printf("wifi ap \"%s\" pass \"%s\" -> http://%s/\n",
+                AP_SSID, AP_PASS, WiFi.softAPIP().toString().c_str());
 }
 
 // --- link diagnosis --------------------------------------------------------
@@ -290,7 +569,8 @@ static void TryFormats() {
 
   if (CountFrames(1500) == 0) {
     Serial.println(F("  board is silent to begin with -- power it on first"));
-    iLastRxAt = iLastHostAt = millis();
+    iLastRxAt = iLastHostAt = iLastWebAt = millis();
+  if (iLastRxAt2) iLastRxAt2 = millis();  // bump only if armed -- never arm link B here
     return;
   }
 
@@ -328,7 +608,8 @@ static void TryFormats() {
     if (n == 0) break;
   }
 
-  iLastRxAt = iLastHostAt = millis();
+  iLastRxAt = iLastHostAt = iLastWebAt = millis();
+  if (iLastRxAt2) iLastRxAt2 = millis();  // bump only if armed -- never arm link B here
   Serial.println(F("--- end ---"));
 }
 
@@ -367,7 +648,8 @@ static void MeasureRC() {
   oSerialHover.begin(BAUDRATE, SERIAL_8N1, PIN_RX, PIN_TX);
   if (CountFrames(1500) == 0) {
     Serial.println(F("  board is not transmitting -- power it on and retry"));
-    iLastRxAt = iLastHostAt = millis();
+    iLastRxAt = iLastHostAt = iLastWebAt = millis();
+  if (iLastRxAt2) iLastRxAt2 = millis();  // bump only if armed -- never arm link B here
     return;
   }
   oSerialHover.end();
@@ -394,7 +676,8 @@ static void MeasureRC() {
   }
 
   oSerialHover.begin(BAUDRATE, SERIAL_8N1, PIN_RX, PIN_TX);
-  iLastRxAt = iLastHostAt = millis();
+  iLastRxAt = iLastHostAt = iLastWebAt = millis();
+  if (iLastRxAt2) iLastRxAt2 = millis();  // bump only if armed -- never arm link B here
   Serial.println(F("--- end ---"));
 }
 
@@ -447,14 +730,15 @@ static void Diagnose() {
 
   oSerialHover.end();
   oSerialHover.begin(BAUDRATE, SERIAL_8N1, PIN_RX, PIN_TX);
-  iLastRxAt = iLastHostAt = millis();  // the blocking above is not a real timeout
+  iLastRxAt = iLastHostAt = iLastWebAt = millis();
+  if (iLastRxAt2) iLastRxAt2 = millis();  // bump only if armed -- never arm link B here  // the blocking above is not a real timeout
   Serial.println(F("--- end ---"));
 }
 
-static int Ramp(int iNow, int iTarget) {
+static int Ramp(int iNow, int iTarget, int iStep) {
   const int iDelta = iTarget - iNow;
-  if (iDelta > RAMP_PER_TICK) return iNow + RAMP_PER_TICK;
-  if (iDelta < -RAMP_PER_TICK) return iNow - RAMP_PER_TICK;
+  if (iDelta > iStep) return iNow + iStep;
+  if (iDelta < -iStep) return iNow - iStep;
   return iTarget;
 }
 
@@ -463,37 +747,57 @@ void setup() {
   delay(300);
   Serial.println();
   Serial.println(F("Gen2.x hoverboard console"));
-  Serial.printf("uart2 %lu 8N1, rx=GPIO%d tx=GPIO%d\n",
+  Serial.printf("link A: uart2 %lu 8N1, rx=GPIO%d tx=GPIO%d\n",
                 (unsigned long)BAUDRATE, PIN_RX, PIN_TX);
+  Serial.printf("link B: uart1 %lu 8N1, rx=GPIO%d tx=GPIO%d\n",
+                (unsigned long)BAUDRATE, PIN_RX2, PIN_TX2);
   Help();
   Serial.println(F("wheel off the ground before you touch 's'."));
 
   HoverSetupEsp32(oSerialHover, (int)BAUDRATE, PIN_RX, PIN_TX);
+  HoverSetupEsp32(oSerialHover2, (int)BAUDRATE, PIN_RX2, PIN_TX2);
   pinMode(LED_BUILTIN, OUTPUT);
+
+  WebSetup();
 }
 
 void loop() {
   const unsigned long iNow = millis();
+  g_iNow = iNow;  // web handlers below stamp iLastWebAt with this
   digitalWrite(LED_BUILTIN, (iNow % 1000) < 200 ? LOW : HIGH);  // active-LOW on the D32
 
   PollConsole(iNow);
+  oDns.processNextRequest();
+  oWeb.handleClient();
 
   while (Receive(oSerialHover, oFb)) {
     iRxFrames++;
     iLastRxAt = iNow;
-    if (bCut) {
+  }
+  while (Receive(oSerialHover2, oFb2)) {
+    iRxFrames2++;
+    iLastRxAt2 = iNow;
+  }
+
+  // Dead-man: a dead link must not leave a wheel spinning. Link B only
+  // participates once it has ever delivered a frame -- master 2 may simply
+  // not be wired yet, and must not veto master 1. Once it has joined, its
+  // silence stops everything: two axles must not disagree about driving.
+  const bool bAliveA = iLastRxAt && iNow - iLastRxAt <= RX_TIMEOUT_MS;
+  const bool bVetoB = iLastRxAt2 && iNow - iLastRxAt2 > RX_TIMEOUT_MS;
+  if (iNow > QUIET_MS) {
+    if (!bAliveA || bVetoB) {
+      if (!bCut) {
+        bCut = true;
+        StopNow(!iLastRxAt ? "no telemetry -- board powered on?"
+                           : (!bAliveA ? "telemetry lost (master 1)"
+                                       : "telemetry lost (master 2)"));
+      }
+      iSpeedTarget = iSteerTarget = 0;
+    } else if (bCut) {
       bCut = false;
       Serial.println(F("telemetry back"));
     }
-  }
-
-  // Dead-man: a dead link must not leave the wheel spinning.
-  if (iNow > QUIET_MS && iNow - iLastRxAt > RX_TIMEOUT_MS) {
-    if (!bCut) {
-      bCut = true;
-      StopNow(iLastRxAt ? "telemetry lost" : "no telemetry -- board powered on?");
-    }
-    iSpeedTarget = iSteerTarget = 0;
   }
 
   // Same idea, other end of the wire: a dead host must not either.
@@ -508,28 +812,45 @@ void loop() {
     Serial.println(F("host back"));
   }
 
+  // Same again for the WiFi page. It heartbeats every 250 ms while open, so a
+  // closed tab, a crashed browser or a phone that walked out of range stops
+  // the wheel. Armed by the first web command and disarmed when it fires, so
+  // it cannot interfere with a serial-only session -- and unlike the serial
+  // watchdog it is not opt-in, because the web client is always a program.
+  if (bWebActive && iNow - iLastWebAt > WEB_TIMEOUT_MS) {
+    bWebActive = false;
+    StopNow("web client lost");
+  }
+
   if (iNow < QUIET_MS) return;  // let the link settle before commanding anything
 
   if (iNow > iNextSend) {
     iNextSend = iNow + SEND_MILLIS;
-    iSpeedNow = Ramp(iSpeedNow, iSpeedTarget);
-    iSteerNow = Ramp(iSteerNow, iSteerTarget);
+    iSpeedNow = Ramp(iSpeedNow, iSpeedTarget, RAMP_PER_TICK);
+    iSteerNow = Ramp(iSteerNow, iSteerTarget, STEER_RAMP_PER_TICK);
 
     uint8_t wSend = wState;
     if (iShutoffFrames) {
       iShutoffFrames--;
       wSend |= 128;  // STATE_Shutoff, only ever from the 'k' diagnostic
     }
-    HoverSend(oSerialHover, iSteerNow, iSpeedNow, wSend, wSend);
+    HoverSend(oSerialHover, STEER_SIGN * iSteerNow, iSpeedNow, wSend, wSend);
+    HoverSend(oSerialHover2, STEER_SIGN * iSteerNow, iSpeedNow, wSend, wSend);
   }
 
   if (iNow > iNextReport) {
     iNextReport = iNow + REPORT_MILLIS;
+    // Fields for master 2 are appended AFTER "rx N" -- hoverctl.py's regex has
+    // no end anchor, so the line stays parseable by the existing GUI.
     Serial.printf("cmd s%4d>%4d t%4d>%4d | meas %6.2f %6.2f km/h | %5.2f %5.2f A "
-                  "| %5.2f V | odo %ld %ld | rx %lu\n",
+                  "| %5.2f V | odo %ld %ld | rx %lu | m2 %6.2f %6.2f km/h "
+                  "%5.2f %5.2f A %5.2f V rx2 %lu\n",
                   iSpeedNow, iSpeedTarget, iSteerNow, iSteerTarget,
                   oFb.iSpeedL / 100.0, oFb.iSpeedR / 100.0,
                   oFb.iAmpL / 100.0, oFb.iAmpR / 100.0, oFb.iVolt / 100.0,
-                  (long)oFb.iOdomL, (long)oFb.iOdomR, (unsigned long)iRxFrames);
+                  (long)oFb.iOdomL, (long)oFb.iOdomR, (unsigned long)iRxFrames,
+                  oFb2.iSpeedL / 100.0, oFb2.iSpeedR / 100.0,
+                  oFb2.iAmpL / 100.0, oFb2.iAmpR / 100.0, oFb2.iVolt / 100.0,
+                  (unsigned long)iRxFrames2);
   }
 }

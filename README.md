@@ -4,7 +4,7 @@ LOLIN D32 (ESP32-D0WD-V3) firmware driving a 6.5" hoverboard hub motor over
 UART. Built and flashed entirely from the CLI — no Arduino IDE.
 
 Status: link verified in both directions, motor runs under command, GUI control
-panel working. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
+panel working, on-board Wi-Fi hotspot with a captive-portal control page. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
 the wrong turns — worth reading before adding a new diagnostic, since most of
 the lost time came from measurement mistakes rather than hardware.
 
@@ -61,6 +61,18 @@ controller on PB6/PB7. The 4-pin master–slave header is `MASTERSLAVE_USART 1`
 A component marked `015` sits in series between MCU pin 43 and header pin 5, so
 that pin fails a continuity beep test. It passes signal fine — see
 [DEBUGGING.md](DEBUGGING.md) for why "no beep" says less than it appears to.
+
+With two master+slave pairs (4 wheels), each **master** gets its own UART —
+plain-UART masters transmit unprompted, so they cannot share a wire:
+
+| | master 1 (link A) | master 2 (link B) |
+| --- | --- | --- |
+| ESP32 RX ← header 4 | GPIO16 | GPIO26 |
+| ESP32 TX → header 5 | GPIO17 | GPIO27 |
+| GND ↔ header 6 | ✓ | ✓ |
+
+The slaves' remote headers stay empty, and GPIO25 stays reserved as the
+diagnostics' unconnected control pin.
 
 ## Tools
 
@@ -166,6 +178,53 @@ Keys: `space`/`Esc` stop, arrows nudge speed and steer, `0` centres.
 "snap to 0 on release" (on by default) makes the speed slider spring back when
 you let go of the mouse, so the wheel only turns while you hold it.
 
+### Driving it — phone (Wi-Fi hotspot)
+
+The firmware raises its own access point at boot — no router involved:
+
+| | |
+| --- | --- |
+| SSID / password | `hoverwheel` / `********` — constants at the top of [src/main.cpp](src/main.cpp); change them before taking the wheel anywhere public |
+| Page | `http://192.168.4.1/` — a captive portal, so Android/iOS pop it automatically right after joining |
+
+The page is a landscape button pad, game-controller style: steer buttons (◀ ▶)
+on the left half, throttle buttons (▲ 전진 / ▼ 후진) on the right, STOP and
+telemetry in the middle. Hold to drive, release to zero that axis; buttons
+are multi-touch, so throttle and steer press together. Settings: speed
+strength (25–100 % of the clamp), steer strength (25–100 % of full lock,
+independent of the clamp), speed/steer invert toggles (persisted
+in the browser; direction with `SPEED_COEFFICIENT -1` is an empirical
+matter), and the max-clamp field. The link pill is the same meter as the GUI
+status bar (`link clean` / `DROPOUTS` / `board silent`), fed by the `rx`
+counter, not the report line.
+
+**Steer only works while moving.** Mixing lives on the master mainboard and
+in pwm mode it is *multiplicative*: upstream `main.c` maps steer to an angle
+and scales one wheel's duty by a lookup factor (`pwmSlave = xScale *
+pwmMaster`), relaying the slave's share over the master–slave cable. Steer
+with zero speed therefore moves nothing, and pivot turns are impossible with
+this binary — that is the mainboard's behaviour, not a bug here. The ESP32
+still sends the same 9-byte frame, to the master only.
+
+Two things carry over from the desktop tools by design:
+
+- **The stop guards.** The page rate-limits slider drags exactly like
+  hoverctl.py did when it grew the stop-resurrection bug, so it implements the
+  same three fixes: STOP drops the pending send, a `stopped` latch zeroes any
+  late slider callback until a fresh press, and the heartbeat never flushes
+  commands.
+- **A watchdog, but not opt-in.** The page heartbeats every 250 ms; if the
+  firmware hears nothing from it for 1 s after it has issued a command —
+  closed tab, crashed browser, phone out of range — the wheel stops
+  (`STOP (web client lost)` on serial). Unlike the serial `w` watchdog there
+  is no off switch, because the web client is always a program, never a human
+  idling at a monitor.
+
+Wi-Fi control is independent of the USB serial port: the serial console and
+the web page work at the same time (last writer wins), and only the COM-port
+tools exclude each other. `hoverctl.py --port` and the monitor still cannot
+run together.
+
 ### Driving it — serial console
 
 [src/main.cpp](src/main.cpp) also takes typed commands. Open the monitor and type:
@@ -217,8 +276,13 @@ Four guards, all in [src/main.cpp](src/main.cpp):
 
 - **Clamp** — `MAX_CMD_BOOT` is 400 of 1000 at boot. In pwm mode that is 40 %
   duty; raise it toward 1000 with `m` or the GUI spinbox to reach top speed.
-- **Ramp** — `RAMP_PER_TICK` limits change to 20 per 100 ms, so nothing steps
-  straight to full command. Stops are exempt and take effect immediately.
+  Steer is deliberately outside this clamp (fixed ±1000): the mainboard maps
+  steer to a wheel-speed *ratio* that can only slow the inner wheel, so full
+  lock is speed-safe, and capping it made turns weak on the ground.
+- **Ramp** — `RAMP_PER_TICK` limits speed change to 20 per 100 ms, so nothing
+  steps straight to full command; steer ramps at 100 per 100 ms (full lock in
+  ~1 s) because steering has to respond. Stops are exempt and take effect
+  immediately.
 - **Dead-man** — telemetry gaps over `RX_TIMEOUT_MS` zero the command, so a
   broken link cannot leave a wheel spinning.
 - **Host watchdog** — opt-in via `w 1`, which the GUI sends on connect and then
@@ -260,9 +324,20 @@ against the old code, so it will catch a regression:
 ### Split boards
 
 Gen2.x hoverboards carry two mainboards, one per wheel, joined by the sensor
-cable. `2.1.8 master Uart.bin` covers the master only; the second wheel needs
-`2.1.8 slave.bin` flashed onto the other board. Until then `iSpeedR` stays 0 no
-matter what is commanded.
+cable. Both are flashed now — `2.1.8 master Uart.bin` on the left-wheel board,
+`2.1.8 slave.bin` on the right-wheel board — so `iSpeedR` is live and steer
+actually steers. The ESP32 wires to the **master's** 6-pin header only; the
+slave gets everything over the master–slave USART cable, and its own remote
+header stays empty.
+
+The 4-wheel frame doubles that: two master+slave pairs, each pair one axle.
+The firmware drives both masters with the same speed/steer frame over two
+independent UARTs (wiring table above) and reads telemetry from each. Link B
+is hot-join: it takes part in the dead-man only after its master has delivered
+a frame, so a not-yet-wired second pair cannot veto the first — but once seen,
+its silence stops everything. Per-pair wheels show in the web page as ①/② and
+the serial report line carries a second block after `rx N` (appended there so
+hoverctl.py's regex still matches).
 
 The board powers itself off after a few minutes of idling, and it did so in the
 middle of three separate measurements during bring-up. Silence on GPIO16 almost
