@@ -1,4 +1,9 @@
-# lolind32-wheel
+# wheel-controller (lolind32-wheel)
+
+> 누비의 바퀴 제어기 펌웨어입니다. 2026-10-13에 [lolind32-wheel](https://github.com/chungddong/lolind32-wheel)
+> 저장소를 커밋 이력째 이 폴더로 옮겼습니다. 이후 작업 기록은 저장소 공통
+> [docs/worklog/](../../docs/worklog/)에 쓰고, 시스템 전체에서의 위치는
+> [system-overview.md](../../docs/architecture/system-overview.md)에 있습니다.
 
 LOLIN D32 (ESP32-D0WD-V3) firmware driving a 6.5" hoverboard hub motor over
 UART. Built and flashed entirely from the CLI — no Arduino IDE.
@@ -18,6 +23,15 @@ PlatformIO Core lives in a project-local venv (`.venv/`), so nothing is installe
 `pio.cmd` is a wrapper that calls it for you. It is a batch file rather than a `.ps1`
 on purpose — PowerShell's default ExecutionPolicy (`Restricted`) refuses to run local
 scripts, and batch files are not subject to it.
+
+The venv is not in git and cannot be moved (its launchers hard-code their own path),
+so create it once per checkout. PlatformIO's toolchains and platforms live in
+`%USERPROFILE%\.platformio` and are shared, so this only installs the Python side:
+
+```
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
 | what | command |
 | --- | --- |

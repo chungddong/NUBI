@@ -16,8 +16,9 @@
 
 ## 이전 기록
 
-이 저장소를 만들기 전의 바퀴 제어기 작업 기록(2026-08 ~ 09)은 `lolind32-wheel/WORKLOG.md`에
-있습니다. 그 저장소를 `firmware/wheel-controller/`로 옮기면 그 안에 그대로 둡니다.
+이 저장소를 만들기 전의 바퀴 제어기 작업 기록(2026-08 ~ 10-13)은
+[firmware/wheel-controller/WORKLOG.md](../../firmware/wheel-controller/WORKLOG.md)에 그대로 두었습니다.
+더 이상 갱신하지 않고, 이후 기록은 여기에 씁니다.
 
 ## 목록
 

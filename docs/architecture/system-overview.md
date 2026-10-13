@@ -1,8 +1,8 @@
 # 시스템 개요
 
 누비의 계층 구성과 계층 사이의 인터페이스를 정리한 문서입니다. 2026-10-13 기준이며, 바퀴 제어기
-쪽 내용은 [lolind32-wheel](https://github.com/chungddong/lolind32-wheel)의 README와 WORKLOG에서
-옮겨 왔습니다. 그 저장소가 `firmware/wheel-controller/`로 들어오면 링크를 바꿉니다.
+쪽 내용은 [wheel-controller README](../../firmware/wheel-controller/README.md)와
+[WORKLOG](../../firmware/wheel-controller/WORKLOG.md)에서 요약했습니다. 세부 사항은 그쪽이 기준입니다.
 
 ## 계층
 
@@ -94,6 +94,8 @@ GPIO16/17, 링크 B는 GPIO26/27입니다.
 가드에서는 유효 픽셀이 10 % 미만이면 BLIND로 보고 정지 처리했습니다.
 
 ## 알려진 문제
+
+전체 목록과 우선순위는 [wheel-controller ISSUES](../../firmware/wheel-controller/ISSUES.md)에 있습니다.
 
 - CH340이 포트를 열 때 흘리는 잡음 바이트가 `speed 1`로 해석되고, 데드밴드 때문에 실제 20 %
   듀티로 움직입니다. 콘솔 입력 강건화가 먼저입니다.

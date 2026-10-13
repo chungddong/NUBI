@@ -1,0 +1,4 @@
+# Python side of the toolchain: PlatformIO Core + pyserial for tools/.
+# Pinned to what the original lolind32-wheel venv ran (2026-10-13).
+platformio==6.2.0
+pyserial==3.5

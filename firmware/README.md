@@ -4,7 +4,7 @@ MCU 하나에 폴더 하나를 둡니다. 각 폴더는 그 자체로 빌드할 
 
 | 폴더 | 보드 | 역할 | 빌드 도구 | 상태 |
 | --- | --- | --- | --- | --- |
-| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | `lolind32-wheel`에서 이전 예정 |
+| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 동작 중. 2026-10-13 `lolind32-wheel`에서 이전 · [열린 이슈](wheel-controller/ISSUES.md) |
 | [hoverboard-mainboard/](hoverboard-mainboard/) | 호버보드 GD32F130 메인보드 | BLDC 구동. RoboDurden Gen2.x-GD32 기반, `SLAVE_SAME_SIDE` 패치 · 부저 끔 | PlatformIO (`platform-gd32`) | 빌드 산출물 복구 필요 |
 
 ## 폴더 안 구성
@@ -14,17 +14,22 @@ PlatformIO 프로젝트를 기준으로 합니다.
 ```
 <보드-이름>/
 ├── README.md        현재 상태, 배선, 빌드 · 플래시 방법, 명령 목록
-├── WORKLOG.md       (있으면) 이 펌웨어만의 작업 기록
+├── ISSUES.md        (있으면) 이 펌웨어의 열린 문제와 우선순위
 ├── DEBUGGING.md     (있으면) 이 펌웨어만의 디버깅 기록
+├── requirements.txt PlatformIO 등 Python 쪽 도구 버전
 ├── platformio.ini
 ├── src/
 ├── include/
 └── tools/           이 펌웨어 전용 PC 도구 (GUI, 진단, 회귀 테스트)
 ```
 
+작업 기록은 펌웨어 폴더에 따로 두지 않고 [docs/worklog/](../docs/worklog/)에 씁니다.
+`wheel-controller/WORKLOG.md`는 통합 전 기록으로 남겨 둔 것입니다.
+
 ## 규칙
 
-- 빌드 결과(`.pio/`)와 로컬 툴체인 venv는 git에 올리지 않습니다.
+- 빌드 결과(`.pio/`)와 로컬 툴체인 venv는 git에 올리지 않습니다. venv는 폴더마다
+  `requirements.txt`로 새로 만듭니다.
 - 시리얼 포트(`COM20` 등)는 PC마다 다르므로 README에 찾는 방법을 같이 적습니다.
 - 상위 컴퓨터와 주고받는 명령이나 프레임 형식을 바꾸면
   [docs/architecture/system-overview.md](../docs/architecture/system-overview.md)도 같이 고칩니다.

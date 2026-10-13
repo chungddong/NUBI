@@ -77,18 +77,19 @@ NUBI/
 
 ## 기존 작업 통합 계획
 
-아직 옮기지 않았습니다. 하나씩 옮기면서 상태를 갱신합니다.
+하나씩 옮기면서 상태를 갱신합니다.
 
 | 기존 위치 | 내용 | 옮길 곳 | 상태 |
 | --- | --- | --- | --- |
-| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · WORKLOG · DEBUGGING | `firmware/wheel-controller/` | 대기 |
-| 이전 세션 스크래치패드 `mainboard-out/` | GD32 커스텀 빌드 (bin 2개, `config.master.h`, `config.slave.h`, 패치) | `firmware/hoverboard-mainboard/` | 폴더가 비어 있음. 채팅 첨부본을 찾거나 재빌드 (업스트림 커밋과 패치는 WORKLOG §6에 있음) |
+| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · WORKLOG · ISSUES · DEBUGGING | [firmware/wheel-controller/](firmware/wheel-controller/) | **완료** (2026-10-13, `git subtree`로 커밋 이력 포함) |
+| 이전 세션 스크래치패드 `mainboard-out/` | GD32 커스텀 빌드 (bin 2개, `config.master.h`, `config.slave.h`, 패치) | `firmware/hoverboard-mainboard/` | 폴더가 비어 있음. 채팅 첨부본을 찾거나 재빌드 ([ISSUES H1](firmware/wheel-controller/ISSUES.md)) |
 | RDK 보드 "sunrise" `~/Develop/autocar` | 깊이 카메라 장애물 가드 (`guard.py`, `obstacle.py`, `hoverlink.py`) | `experiments/2026-09-17_depth-guard/` | 보드에서 가져와야 함 |
 | Jetson "dongki" `~/Study/flysim` | 초파리 전뇌 폐루프 주행, `hover_link.py`, 웹 UI | `experiments/2026-09-18_flysim-drive/` | 보드에서 가져와야 함 |
 
-옮기기 전에 확인할 것: `lolind32-wheel`에 커밋하지 않은 변경이 있습니다 (`README.md`,
-`src/main.cpp` 수정, `WORKLOG.md` 추가). 원래 저장소에서 먼저 커밋해 두는 편이 안전합니다. 커밋
-이력까지 가져오려면 `git subtree add`를 쓰면 됩니다.
+`lolind32-wheel`은 커밋 이력째 가져왔기 때문에 원래 커밋 해시(`6e0a3a6`, `cd922a5`, `55f450a` 등)가
+이 저장소에서도 그대로 통하고, `git blame`도 원래 커밋까지 따라갑니다. 다만
+`git log -- firmware/wheel-controller`는 통합 커밋에서 멈추므로, 통합 전 이력은 `git log 3cca93e^2`로
+봅니다.
 
 ## 작업 규칙
 
