@@ -22,3 +22,6 @@
 # 텍스트지만 diff가 의미 없는 것
 *.step  -diff
 *.stp   -diff
+
+# DXF는 CAD 도구가 CRLF로 쓰므로 줄바꿈을 건드리지 않는다
+*.dxf   -text
