@@ -1,24 +1,23 @@
 # ── 버전관리 방침 ───────────────────────────────────────────────
-# **소스와 문서만 담는다.** 형상 파일은 스크립트로 다시 만들 수 있고,
-# 통째로 넣으면 저장소가 600MB 를 넘는다 (exports/robot_vacuum.step 하나가 131MB).
-# 예외: hoverboard_mount 의 제작용 산출물(STEP/STL/DXF/도면)은 발주에 그대로 쓰는
-# 확정본이라 남긴다 — 다 합쳐 6MB 밖에 안 된다.
+# **소스와 문서만 담는다.** 형상 · 메시 파일은 스크립트로 다시 만들 수 있다.
+# 예외: hoverboard_mount 의 제작용 산출물 (STEP/STL/DXF/도면) 은 발주에 그대로 쓰는 확정본이라 남긴다,
+#       차량은 마지막 검증 버전 STEP 하나 (아래) 와 휠 모터 참조 STEP 하나.
 
 # 파이썬
 __pycache__/
 *.py[cod]
 .venv/
 
-# 외부 툴 바이너리 (460MB)
+# FEA 외부 툴 바이너리 (460MB) — 설치는 models/hoverboard_mount/FEA.md
 tools/fea/calculix/
 tools/fea/calculix_*.zip
 tools/fea/gmsh_pyenv/
 tools/fea/python/
 
-# 생성 형상 (460MB) — models/*.py 를 실행하면 다시 나온다
+# 생성 형상 — models/*.py 를 실행하면 다시 나온다
 exports/
 
-# 남의 참조 STEP (1.4GB) — 출처가 따로 있고 우리가 만든 게 아니다.
+# 남의 참조 STEP — 출처가 따로 있고 우리가 만든 게 아니다.
 # 예외: 차량 (models/vehicle · hoverboard_mount) 을 짓는 데 꼭 필요한 호버보드 휠 모터 STEP (1MB) 하나만 담는다.
 refmodel/*
 !refmodel/Motor, BLDC, Hoverboard Wheel, 6.5in.stp
@@ -32,9 +31,8 @@ models/hoverboard_mount/output/fea/**/*.sta
 models/hoverboard_mount/output/fea/**/*.cvg
 models/hoverboard_mount/output/fea/**/*.12d
 models/hoverboard_mount/output/fea/**/*.msh
-models/hoverboard_mount/output/fea/**/*.log
 
-# 로그 (뷰어 · 기록 워커 · 빌드 로그) — 전부 실행할 때마다 새로 생긴다
+# 로그 (뷰어 · 기록 워커 · 빌드 로그) — 실행할 때마다 새로 생긴다
 *.log
 *.tmp
 *.bak
@@ -42,29 +40,9 @@ models/hoverboard_mount/output/fea/**/*.log
 # 개인 설정 (권한 허용 목록 등)
 .claude/settings.local.json
 
-# 개인 메모 앱 (Trilium) 연동 스크립트 — 저장소에 담지 않는다
-tools/trilium/
-
-# 웹 시뮬레이터 메시 (7 MB) — models/manuel_1_0/web_export.py 로 다시 만든다
-models/manuel_1_0/web/data/
-cadview/
-
-# 웹 시뮬레이터 메시 (11 MB) — models/mycobot_280_pi/web_export.py 로 다시 만든다
-models/mycobot_280_pi/web/data/
-# 웹 시뮬레이터 메시 (3 MB) — models/manuel_mini/web_export.py 로 다시 만든다
-models/manuel_mini/web/data/
-models/manuel_mini/web/data_v2/
-models/manuel_mini/web/data_v2p/
-models/manuel_mini/web/data_v2b/
-models/manuel_mini/web/data_v3d/
-models/manuel_mini/web/data_v3s/
-
-# 웹 시뮬레이터 메시 (2 MB) — models/manuel_dm/web_export.py 로 다시 만든다
-models/manuel_dm/web/data/
-
 # 차량 시뮬레이터 데이터 (web_export.py 가 다시 만든다)
 models/vehicle/sim/web/data/
-# 복도 맵 — 사용자의 다른 프로젝트 (D:\Develop\ClaudeGame\hallway-3d) 에서 import_hallway.py 로 복사해 온 것
+# 복도 맵 — 다른 프로젝트 (D:\Develop\ClaudeGame\hallway-3d) 에서 import_hallway.py 로 복사해 온 것
 models/vehicle/sim/web/hallway/
 
 # 차량 버전 산출물 (600MB) — `record.py <버전> --rebuild` 로 다시 만든다.

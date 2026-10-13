@@ -1,6 +1,5 @@
 build123d==0.11.1
 ocp_vscode==4.0.0
-cq-editor==0.7.0
 # 차량 기록 도구 (models/vehicle/record.py — 이미지 · 메시 캐시), 배선 라우터 (v29 router.py), 도면 · 해석 후처리
 numpy==2.4.6
 scipy==1.18.0
