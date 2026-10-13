@@ -2,10 +2,84 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "ocp-viewer",
-      "runtimeExecutable": ".venv\\Scripts\\python.exe",
-      "runtimeArgs": ["-m", "ocp_vscode"],
-      "port": 3939
+      "name": "pouch-dispenser-web",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8731",
+        "--directory",
+        "models/pouch_dispenser/web"
+      ],
+      "port": 8731
+    },
+    {
+      "name": "sketchfab-views",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "tools/sketchfab_views/server.py",
+        "--port",
+        "8742",
+        "--out",
+        "refmodel/mo/sketchfab"
+      ],
+      "port": 8742
+    },
+    {
+      "name": "manuel-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "models/manuel_1_0/web/serve.py",
+        "8745"
+      ],
+      "port": 8745
+    },
+    {
+      "name": "cadview",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "cadview.server",
+        "--port",
+        "3900"
+      ],
+      "port": 3900
+    },
+    {
+      "name": "mycobot-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "models/mycobot_280_pi/web/serve.py",
+        "8746"
+      ],
+      "port": 8746
+    },
+    {
+      "name": "vehicle-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "models/vehicle/sim/web/serve.py",
+        "8748"
+      ],
+      "port": 8748
+    },
+    {
+      "name": "manuel-dm-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "models/manuel_dm/web/serve.py",
+        "8749"
+      ],
+      "port": 8749
+    },
+    {
+      "name": "manuel-mini-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "models/manuel_mini/web/serve.py",
+        "8747"
+      ],
+      "port": 8747
     }
   ]
 }
