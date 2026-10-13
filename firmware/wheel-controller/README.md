@@ -5,8 +5,8 @@
 > [docs/worklog/](../../docs/worklog/README.md)로 옮겼고, 시스템 전체에서의 위치는
 > [system-overview.md](../../docs/architecture/system-overview.md)에 있습니다.
 
-LOLIN D32 (ESP32-D0WD-V3) firmware driving a 6.5" hoverboard hub motor over
-UART. Built and flashed entirely from the CLI — no Arduino IDE.
+LOLIN D32 (ESP32-D0WD-V3) firmware driving four 6.5" hoverboard hub motors (two
+axles, one mainboard pair each) over UART. Built and flashed entirely from the CLI — no Arduino IDE.
 
 Status: link verified in both directions, motor runs under command, GUI control
 panel working, on-board Wi-Fi hotspot with a captive-portal control page.
@@ -14,7 +14,9 @@ Since 2026-10-13 the firmware drives every wheel itself (wheel mode, mixing on
 the ESP32) and **needs mainboard masters that pass per-wheel values straight through** (the
 "passthrough" build; the mainboard firmware is kept outside this repository). All four boards and
 the ESP32 were flashed that day and all four wheels pass the lifted-wheel
-bench test (forward, pivot); not yet driven on the ground. See
+bench test (forward, pivot); not yet driven on the ground. The frame code was
+then rewritten from scratch ([include/hover_protocol.h](include/hover_protocol.h)); that build
+has not been flashed yet ([ISSUES](ISSUES.md) H6). See
 [Wheel mixing](#wheel-mixing). [The work log](../../docs/worklog/README.md) is the
 dated journal of each working session, and [ISSUES.md](ISSUES.md) tracks the open
 issues and what to do next. [The link-debugging notes](../../docs/worklog/topics/wheel-link-debugging.md) record how it got there, including

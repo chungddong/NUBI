@@ -10,19 +10,20 @@
 Nano가 맡습니다.
 
 > *NUBI is a modular four-wheel skid-steer rover built from hoverboard hub motors. The chassis is designed in
-> code with build123d, an ESP32 drives the stock hoverboard motor boards, and a Jetson Orin Nano handles
-> perception and planning. Documentation is written in Korean.*
+> code with build123d, an ESP32 mixes and drives each wheel through the hoverboard's own motor boards, and a
+> Jetson Orin Nano handles perception and planning. Documentation is written in Korean.*
 
 ## 특징
 
 - **코드로 설계한 차체** — 버전 v00 ~ v29를 폴더 하나씩 남겼습니다. 버전마다 이미지 · BOM · 간섭 검사 결과가
-  기록되고, 이전 버전과 바뀐 곳을 그림으로 비교합니다. STEP은 명령 한 번으로 다시 만듭니다.
+  기록되고, 이전 버전과 바뀐 곳을 그림으로 비교합니다. STEP은 명령 한 번으로 다시 만듭니다(휠 모터 참조 STEP은
+  따로 준비).
 - **호버보드 부품을 그대로 쓰는 구동계** — 호버보드 원래 모터 보드에 오픈소스 펌웨어(RoboDurden
-  Gen2.x)를 올리고, ESP32가 클램프 · 램프 · 데드맨 · 워치독 같은 안전장치와 좌우 믹싱을 맡습니다.
+  Gen2.x)를 올리고, ESP32가 바퀴별 믹싱과 클램프 · 램프 · 데드맨 · 워치독 같은 안전장치를 맡습니다.
 - **실제 형상으로 도는 웹 시뮬레이터** — 차체 버전의 메시를 그대로 불러와 주행, 센서 사각지대, 전복각,
   비상정지 방식, 자율주행(점유 격자 + A*)을 브라우저에서 확인합니다.
 - **구조해석** — 휠 클램프를 Gmsh + CalculiX로 해석해 형상을 골랐습니다.
-- **처음부터 남긴 기록** — 2026-07-27 첫 설계부터 작업 일지 36편, 설계 결정 D-01 ~ D-21, 실패 기록까지
+- **처음부터 남긴 기록** — 2026-07-27 첫 설계부터의 작업 일지, 설계 결정(D-01 ~ D-21, ADR), 실패한 시도까지
   같은 양식의 Markdown으로 남겼습니다.
 
 ## 현재 상태 (2026-10)
@@ -31,8 +32,8 @@ Nano가 맡습니다.
 | --- | --- |
 | 차체 설계 | v28(내부 배선 90가닥)까지 검증 · 기록 완료. 전체 830 × 590 × 534 mm, 약 34 kg(시뮬레이터 추정). v29(배선을 바닥판 위 직각 경로로) 진행 중 |
 | 부품 | 국내 구매처 기준 BOM, 단가 확인된 합 약 264만 원 |
-| 시제품 | 호버보드 허브모터 4륜 프레임 조립. 바퀴를 띄운 상태로 4륜 회전 확인 |
-| 바퀴 제어 | ESP32 펌웨어 동작 (USB 시리얼 명령, Wi-Fi 조종 페이지, 안전장치). 탱크 모드는 지상 주행 전 |
+| 시제품 | 호버보드 허브모터 4륜 프레임 조립 |
+| 바퀴 제어 | ESP32가 네 바퀴를 각각 믹싱해 구동 (USB 시리얼 명령, Wi-Fi 조종 페이지, 안전장치). 바퀴를 띄운 시험에서 전진 · 제자리 회전 확인, 바닥 주행은 다음 단계 |
 | 시뮬레이터 | 사각지대 · 전복 · 비상정지 방식 비교 · 복도 27 m 자율주행까지 추정 |
 | 상위 제어 | 깊이 카메라 장애물 가드(RDK), 초파리 전뇌 시뮬레이션 폐루프 주행(Jetson) 실험 |
 | 자율주행 (실기) | ROS 2 · SLAM · 내비게이션은 다음 단계 |
@@ -43,10 +44,10 @@ Nano가 맡습니다.
 상위 컴퓨터   Jetson Orin Nano — 인식 · 판단 · 경로 계획
    │  USB 시리얼 115200, 텍스트 명령 (s / t / x / m / w / h …)
    ▼
-바퀴 제어기   LOLIN D32 (ESP32) — 안전장치 · 좌우 믹싱 · Wi-Fi 조종 페이지
+바퀴 제어기   LOLIN D32 (ESP32) — 바퀴별 믹싱 · 안전장치 · Wi-Fi 조종 페이지
    │  UART 19200 8N1 ×2 (앞축 · 뒤축), 명령 9 B / 텔레메트리 22 B, CRC16-XMODEM
    ▼
-모터 보드     호버보드 2세대 분리형 보드 ×4 (RoboDurden Hoverboard-Firmware-Hack-Gen2.x)
+모터 보드     호버보드 2세대 분리형 보드 ×4 (RoboDurden Gen2.x 기반 펌웨어, 저장소 밖에서 관리)
    │  3상 + 홀센서
    ▼
 구동         6.5" BLDC 허브모터 ×4, 스키드 스티어
@@ -104,8 +105,7 @@ py -3.12 -m venv .venv
 # 뷰어를 띄워 두고 (http://127.0.0.1:3939)
 .venv\Scripts\python.exe -m ocp_vscode
 # 다른 터미널에서 버전 하나를 다시 짓기 (형상 · 검증 · STEP · 이미지)
-# 휠 모터 STEP이 필요합니다 — hardwareehicle
-efmodel\README.md 참고
+# 휠 모터 STEP이 따로 필요합니다 — refmodel\README.md 참고
 .venv\Scripts\python.exe models\vehicle\record.py v28_wiring --rebuild
 ```
 
@@ -132,16 +132,17 @@ cd firmware\wheel-controller
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# Wi-Fi 조종 페이지 비밀번호는 저장소에 없습니다. 예시를 복사해 직접 정합니다 (8자 이상)
+# Wi-Fi 조종 페이지 비밀번호는 저장소에 없습니다.
+# 예시를 복사한 뒤 WIFI_AP_PASS를 직접 정합니다 (8자 이상)
 copy include\wifi_config.example.h include\wifi_config.h
 
 .\pio.cmd run                   # 빌드
 .\pio.cmd run -t upload         # 빌드 + 플래시
-.\hoverctl.cmd                  # 마우스 조종 패널
+.\wheelbench.cmd                # 네 바퀴 시험 패널
 ```
 
 배선, 명령 목록, 안전장치는 [wheel-controller README](firmware/wheel-controller/README.md)에 있습니다.
-실제 바퀴를 돌리기 전에 바퀴를 바닥에서 띄우고, 클램프(`m`) 값을 낮게 둔 상태에서 시험하세요.
+처음에는 바퀴를 바닥에서 띄우고, 출력 상한(`m`)을 낮게 둔 상태에서 시험하세요.
 
 ## 문서
 
@@ -150,6 +151,7 @@ copy include\wifi_config.example.h include\wifi_config.h
 | [작업 일지](docs/worklog/README.md) | 2026-07-27부터의 모든 작업 일지와 연표, 주제별 기록(설계 이야기, 교훈, 디버깅 기록) |
 | [시스템 개요](docs/architecture/system-overview.md) | 계층 구성, 인터페이스, 부품 구성, 정해야 할 것 |
 | [차체 설계 결정 D-01 ~](hardware/vehicle/models/vehicle/DECISIONS.md) | 센서 · 모터 드라이버 · 배터리 · 비상정지 · 배선을 고른 이유와 버린 대안 |
+| [여러 계층에 걸친 결정](docs/decisions/README.md) | 바퀴 보드 짝과 믹싱 위치(ADR 0001) 등 |
 | [차체 버전 표](hardware/vehicle/models/vehicle/README.md) | v00 ~ v29 버전마다 바뀐 곳과 이미지 |
 | [바퀴 제어기 이슈](firmware/wheel-controller/ISSUES.md) | 열린 문제와 우선순위 |
 | [구조해석](hardware/vehicle/models/hoverboard_mount/FEA.md) | 휠 클램프 FEA 파이프라인과 결과 |
@@ -165,7 +167,7 @@ copy include\wifi_config.example.h include\wifi_config.h
 | 09-10 ~ 09-15 | 전체 차량 뷰어, 형상 기반 BOM | [9월 일지](docs/worklog/2026-09.md) |
 | 09-17 ~ 09-22 | 탱크 모드 · 데드밴드, RDK 장애물 가드, Jetson 초파리 뇌 폐루프 주행, 메인보드 커스텀 펌웨어 | [9월 일지](docs/worklog/2026-09.md) |
 | 10-04 ~ 10-05 | 차체 재설계 v01 ~ v29: 실외 외관, 실부품 선정(D-01 ~ D-21), 웹 시뮬레이터, 내부 배선 | [10월 일지](docs/worklog/2026-10.md) |
-| 10-13 | 누비 통합 저장소 | [10월 일지](docs/worklog/2026-10.md) |
+| 10-13 | 누비 통합 저장소. 믹싱을 ESP32로 옮겨 네 바퀴 시험(바퀴 띄움), MIT 공개 준비 | [10월 일지](docs/worklog/2026-10.md) |
 
 ## 작업 규칙
 
@@ -182,6 +184,8 @@ AI 에이전트(Claude Code, Codex)용 규칙은 [AGENTS.md](AGENTS.md)에 있�
 
 ## 라이선스와 출처
 
+누비의 코드, 설계, 문서는 [MIT 라이선스](LICENSE)로 공개합니다.
+
 이 저장소는 2026-10-13에 개인 저장소 두 곳, 바퀴 제어기(`lolind32-wheel`)와 차체 설계(`HoverboardVehicle`)를
 커밋 이력째 합쳐 만들었습니다. 통합 전 이력은 `git log d13c5a1^2`(바퀴 제어기)와 `git log a31c62c^2`(차체
 설계)로 볼 수 있습니다.
@@ -197,5 +201,3 @@ AI 에이전트(Claude Code, Codex)용 규칙은 [AGENTS.md](AGENTS.md)에 있�
 STEP을 따로 받아야 합니다([hardware/vehicle/refmodel/](hardware/vehicle/refmodel/README.md)).
 
 웹 시뮬레이터는 실행할 때 three.js와 three-mesh-bvh(둘 다 MIT)를 CDN에서 불러옵니다.
-
-누비의 코드, 설계, 문서는 [MIT 라이선스](LICENSE)로 공개합니다.

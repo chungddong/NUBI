@@ -5,8 +5,8 @@ r"""특이점을 뺀 **구조응력**을 뽑는다.
 안 된다. 구멍에서 조금만 벗어나면 값이 수렴한다 (45.1 → 45.3, +0.4%).
 
 쓰는 법:
-    .venv\Scripts\python.exe toolsea\structural_stress.py            # 기본 3케이스
-    .venv\Scripts\python.exe toolsea\structural_stress.py <폴더명> ...
+    .venv\Scripts\python.exe tools\fea\structural_stress.py            # 기본 3케이스
+    .venv\Scripts\python.exe tools\fea\structural_stress.py <폴더명> ...
 """
 
 import sys

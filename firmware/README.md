@@ -4,7 +4,7 @@ MCU 하나에 폴더 하나를 둡니다. 각 폴더는 그 자체로 빌드할 
 
 | 폴더 | 보드 | 역할 | 빌드 도구 | 상태 |
 | --- | --- | --- | --- | --- |
-| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 바퀴별 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 바퀴 모드 빌드 동작 중(2026-10-13 플래시, 바퀴 띄운 시험 통과) · 시험 GUI `wheelbench` · [열린 이슈](wheel-controller/ISSUES.md) |
+| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 바퀴별 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 바퀴 모드 동작 중(2026-10-13 플래시, 바퀴 띄운 시험 통과). 그 뒤 프레임 코드를 직접 작성한 빌드는 실기 확인 전(H6) · 시험 GUI `wheelbench` · [열린 이슈](wheel-controller/ISSUES.md) |
 
 모터 보드(호버보드 메인보드 ×4)의 펌웨어는 이 저장소에서 관리하지 않습니다. GPL-3.0 업스트림(RoboDurden
 Hoverboard-Firmware-Hack-Gen2.x-GD32)을 고친 것이라 이 PC에서만 관리하고(`hoverboard-mainboard/`, git에서 제외),

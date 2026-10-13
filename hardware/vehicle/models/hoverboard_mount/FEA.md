@@ -109,7 +109,7 @@ ParaView에서는 VTU를 열고 `S_Mises`를 색상 필드로 선택한다. `U`�
 **구조응력**(구멍 벽에서 3 mm 밖의 최댓값)을 설계값으로 쓴다. 뽑는 법:
 
 ```powershell
-.venv\Scripts\python.exe toolsea\structural_stress.py
+.venv\Scripts\python.exe tools\fea\structural_stress.py
 ```
 
 ### 안전율

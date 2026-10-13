@@ -272,7 +272,7 @@ powershell -ExecutionPolicy Bypass -File tools\fea\run_clamp_fea.ps1 `
 **최대응력을 인용하지 마라.** 최대점은 셋 다 바닥 볼트 구멍 벽 위 모서리(z=+14.50,
 구멍 축에서 반경 3.30 mm)이고, 강체 구속 모서리라 메쉬를 조일수록 계속 오른다
 (4 mm 132.2 → 3 mm 150.1, +13.5%). 구멍에서 3 mm 만 벗어나면 45.1 → 45.3 으로
-0.4% 수렴한다. 뽑는 법: `.venv\Scripts\python.exe toolsea\structural_stress.py`
+0.4% 수렴한다. 뽑는 법: `.venv\Scripts\python.exe tools\fea\structural_stress.py`
 
 안전율(구조응력 45.3 기준): **AL6061-T6 6.1** / PETG 근사 **1.1**.
 출력품은 800 N 에서 재료 한계이고 변위도 1.91 mm 다 — 사람을 태우지 않는다.
