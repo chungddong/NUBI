@@ -4,7 +4,10 @@ LOLIN D32 (ESP32-D0WD-V3) firmware driving a 6.5" hoverboard hub motor over
 UART. Built and flashed entirely from the CLI — no Arduino IDE.
 
 Status: link verified in both directions, motor runs under command, GUI control
-panel working, on-board Wi-Fi hotspot with a captive-portal control page. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
+panel working, on-board Wi-Fi hotspot with a captive-portal control page.
+Tank drive (one master per wheel, mixing on the ESP32) is implemented but not
+yet driven on the ground — see [Drive modes](#drive-modes). [WORKLOG.md](WORKLOG.md) is the
+dated record of each working session and its open issues. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
 the wrong turns — worth reading before adding a new diagnostic, since most of
 the lost time came from measurement mistakes rather than hardware.
 
@@ -62,8 +65,8 @@ A component marked `015` sits in series between MCU pin 43 and header pin 5, so
 that pin fails a continuity beep test. It passes signal fine — see
 [DEBUGGING.md](DEBUGGING.md) for why "no beep" says less than it appears to.
 
-With two master+slave pairs (4 wheels), each **master** gets its own UART —
-plain-UART masters transmit unprompted, so they cannot share a wire:
+With two masters, each gets its own UART — plain-UART masters transmit
+unprompted, so they cannot share a wire:
 
 | | master 1 (link A) | master 2 (link B) |
 | --- | --- | --- |
@@ -71,8 +74,11 @@ plain-UART masters transmit unprompted, so they cannot share a wire:
 | ESP32 TX → header 5 | GPIO17 | GPIO27 |
 | GND ↔ header 6 | ✓ | ✓ |
 
-The slaves' remote headers stay empty, and GPIO25 stays reserved as the
-diagnostics' unconnected control pin.
+What the two links *mean* is the drive mode (see [Drive modes](#drive-modes)):
+in tank mode link A is the **left** wheel's master and link B the **right**
+wheel's; in board mode each link carries a master+slave pair. Either way any
+slave's remote header stays empty, both GNDs go to the D32, and GPIO25 stays
+reserved as the diagnostics' unconnected control pin.
 
 ## Tools
 
@@ -191,20 +197,18 @@ The page is a landscape button pad, game-controller style: steer buttons (◀ �
 on the left half, throttle buttons (▲ 전진 / ▼ 후진) on the right, STOP and
 telemetry in the middle. Hold to drive, release to zero that axis; buttons
 are multi-touch, so throttle and steer press together. Settings: speed
-strength (25–100 % of the clamp), steer strength (25–100 % of full lock,
-independent of the clamp), speed/steer invert toggles (persisted
+strength (25–100 % of the clamp), steer strength (25–100 %; of the clamp in
+tank mode, of full lock in board mode), speed/steer invert toggles (persisted
 in the browser; direction with `SPEED_COEFFICIENT -1` is an empirical
-matter), and the max-clamp field. The link pill is the same meter as the GUI
-status bar (`link clean` / `DROPOUTS` / `board silent`), fed by the `rx`
-counter, not the report line.
+matter), the max-clamp field, and the [drive-mode](#drive-modes) settings
+(mode, link B invert, deadband — these live in the firmware's flash, not the
+browser). The link pill is the same meter as the GUI status bar (`link clean`
+/ `DROPOUTS` / `board silent`), fed by the `rx` counter, not the report line;
+while the dead-man has cut the wheel it shows the reason instead.
 
-**Steer only works while moving.** Mixing lives on the master mainboard and
-in pwm mode it is *multiplicative*: upstream `main.c` maps steer to an angle
-and scales one wheel's duty by a lookup factor (`pwmSlave = xScale *
-pwmMaster`), relaying the slave's share over the master–slave cable. Steer
-with zero speed therefore moves nothing, and pivot turns are impossible with
-this binary — that is the mainboard's behaviour, not a bug here. The ESP32
-still sends the same 9-byte frame, to the master only.
+In board mode **steer only works while moving** (see [Drive modes](#drive-modes)
+for why); the page says so and the steer buttons are meant to be held together
+with a throttle button. In tank mode the steer buttons alone pivot the frame.
 
 Two things carry over from the desktop tools by design:
 
@@ -238,7 +242,60 @@ run together.
 | `l <n>` | LED/state bits |
 | `w <0\|1>` | arm/disarm the host watchdog |
 | `h` | heartbeat (feeds the watchdog, nothing else) |
-| `?` | help |
+| `v <0\|1>` | drive mode: `0` board mixes, `1` tank (persisted; stops the wheel first) |
+| `i <0\|1>` | invert link B (tank mode; persisted; stops the wheel first) |
+| `b <n>` | deadband duty, 0 = off (persisted) |
+| `?` | help, and the current drive-mode settings |
+
+### Drive modes
+
+Two ways to turn a two-wheel frame, chosen with `v` (or the page's 구동
+selector) and remembered in flash across reboots. Boot default is board
+mode — the stock master+slave wiring drives as before; tank mode refuses to
+move until both links deliver telemetry.
+
+**Board mode (`v 0`)** — one master+slave pair per link, and the mainboard
+mixes speed and steer itself. Upstream `main.c` does that *multiplicatively*
+in pwm mode: steer is scaled down by an expo as speed rises, mapped to an
+angle, and a lookup table turns that into the inner/outer duty **ratio**
+(`pwmSlave = xScale × pwmMaster`). Two consequences, both measured against
+the upstream source rather than guessed:
+
+- steer with zero speed moves nothing — there is no pivot turn;
+- at full lock the inner wheel gets at most ~12 % reverse duty (−109 at
+  speed 200, −120 at 300, ~0 by 600, and +30 % *forward* at 1000). This motor
+  needs ~20 % to move at all, so the inner wheel just sits and drags.
+
+That is a hoverboard-rider tuning, not a bug here, and nothing sent in the
+9-byte frame changes it.
+
+**Tank mode (`v 1`)** — both boards run the *master* binary, one per wheel,
+link A left and link B right, and the ESP32 does the mixing:
+
+```
+turn  = steer × max / 1000
+left  = clamp(speed + turn, ±max)
+right = clamp(speed − turn, ±max)      → steer field on the wire is 0
+```
+
+Steer alone pivots on the spot at ±max; full steer at full speed turns about
+the stationary inner wheel; neither wheel ever exceeds the clamp. Positive
+steer is a right turn (left wheel gets the extra). Left and right hub motors
+face opposite ways, so link B is negated by default (`i 1`) — exactly what
+the hoverboard master does to its slave. This is empirical: if "forward"
+spins the frame on the spot, flip it with `i 0`; if left and right are
+swapped, swap the link A/B wires or use the page's 조향 반전. Tank mode needs
+**both** links alive — one wheel driving alone is a spin, so master 2 going
+silent stops everything, from boot, with no hot-join grace.
+
+**Deadband (`b`, both modes)** — below ~200 of 1000 (20 % duty) the wheel does
+not move under the frame's weight, so with a 20-per-tick ramp a press used to
+be a second of nothing. Every non-zero per-wheel command is now remapped onto
+`[deadband, max]` before it goes on the wire; the ramp still runs in command
+space, so only the first tick out of zero jumps. `b 0` disables it, and
+`max ≤ deadband` disables it implicitly. Tune it to the lowest value that
+reliably starts the loaded wheel. The serial report line ends in `out A B`,
+the values actually sent per link.
 
 ### Diagnostics
 
@@ -276,15 +333,20 @@ Four guards, all in [src/main.cpp](src/main.cpp):
 
 - **Clamp** — `MAX_CMD_BOOT` is 400 of 1000 at boot. In pwm mode that is 40 %
   duty; raise it toward 1000 with `m` or the GUI spinbox to reach top speed.
-  Steer is deliberately outside this clamp (fixed ±1000): the mainboard maps
-  steer to a wheel-speed *ratio* that can only slow the inner wheel, so full
-  lock is speed-safe, and capping it made turns weak on the ground.
+  The clamp bounds what reaches the wire in both drive modes, deadband remap
+  included. Steer is deliberately outside it (fixed ±1000): in board mode the
+  mainboard maps steer to a wheel-speed *ratio* that can only slow the inner
+  wheel, so full lock is speed-safe, and capping it made turns weak on the
+  ground; in tank mode steer is scaled by the clamp and each wheel is clamped
+  after mixing.
 - **Ramp** — `RAMP_PER_TICK` limits speed change to 20 per 100 ms, so nothing
   steps straight to full command; steer ramps at 100 per 100 ms (full lock in
   ~1 s) because steering has to respond. Stops are exempt and take effect
-  immediately.
+  immediately. The deadband remap sits after the ramp, so the rate of change
+  is unchanged; only the first tick out of zero jumps to a duty that moves.
 - **Dead-man** — telemetry gaps over `RX_TIMEOUT_MS` zero the command, so a
-  broken link cannot leave a wheel spinning.
+  broken link cannot leave a wheel spinning. In tank mode both links must be
+  alive; in board mode link B joins the dead-man after its first frame.
 - **Host watchdog** — opt-in via `w 1`, which the GUI sends on connect and then
   feeds every 250 ms. Silence over `HOST_TIMEOUT_MS` stops the wheel, so a
   crashed GUI or an unplugged cable does not leave it running. It is off by
@@ -330,14 +392,22 @@ actually steers. The ESP32 wires to the **master's** 6-pin header only; the
 slave gets everything over the master–slave USART cable, and its own remote
 header stays empty.
 
-The 4-wheel frame doubles that: two master+slave pairs, each pair one axle.
-The firmware drives both masters with the same speed/steer frame over two
-independent UARTs (wiring table above) and reads telemetry from each. Link B
-is hot-join: it takes part in the dead-man only after its master has delivered
-a frame, so a not-yet-wired second pair cannot veto the first — but once seen,
-its silence stops everything. Per-pair wheels show in the web page as ①/② and
-the serial report line carries a second block after `rx N` (appended there so
-hoverctl.py's regex still matches).
+That is board mode. With a second master board the same two boards can
+instead each be a master driving one wheel — tank mode, where the mixing moves
+to the ESP32 and pivot turns become possible; see [Drive modes](#drive-modes).
+The firmware talks to both masters over two independent UARTs (wiring table
+above) and reads telemetry from each. In board mode link B is hot-join: it
+takes part in the dead-man only after its master has delivered a frame, so a
+not-yet-wired second pair cannot veto the first — but once seen, its silence
+stops everything. In tank mode it is required from boot. Per-link wheels show
+in the web page as ①/② and the serial report line carries a second block after
+`rx N` (appended there so hoverctl.py's regex still matches).
+
+For a 4-wheel frame in tank mode, each side becomes a master+slave pair with
+the pair's steer at 0 — the slave then mirrors its master exactly. The master
+negates its slave (`SendSlave(-pwmSlave)`, for the mirrored hoverboard
+mounting), so a slave motor on the *same* side as its master must be mounted
+the other way round to spin with it.
 
 The board powers itself off after a few minutes of idling, and it did so in the
 middle of three separate measurements during bring-up. Silence on GPIO16 almost
