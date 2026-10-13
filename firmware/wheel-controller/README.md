@@ -1,8 +1,8 @@
 # wheel-controller (lolind32-wheel)
 
 > 누비의 바퀴 제어기 펌웨어입니다. 2026-10-13에 [lolind32-wheel](https://github.com/chungddong/lolind32-wheel)
-> 저장소를 커밋 이력째 이 폴더로 옮겼습니다. 이후 작업 기록은 저장소 공통
-> [docs/worklog/](../../docs/worklog/)에 쓰고, 시스템 전체에서의 위치는
+> 저장소를 커밋 이력째 이 폴더로 옮겼습니다. 작업 일지와 디버깅 기록은 저장소 공통
+> [docs/worklog/](../../docs/worklog/README.md)로 옮겼고, 시스템 전체에서의 위치는
 > [system-overview.md](../../docs/architecture/system-overview.md)에 있습니다.
 
 LOLIN D32 (ESP32-D0WD-V3) firmware driving a 6.5" hoverboard hub motor over
@@ -11,9 +11,9 @@ UART. Built and flashed entirely from the CLI — no Arduino IDE.
 Status: link verified in both directions, motor runs under command, GUI control
 panel working, on-board Wi-Fi hotspot with a captive-portal control page.
 Tank drive (one master per wheel, mixing on the ESP32) is implemented but not
-yet driven on the ground — see [Drive modes](#drive-modes). [WORKLOG.md](WORKLOG.md) is the
+yet driven on the ground — see [Drive modes](#drive-modes). [The work log](../../docs/worklog/README.md) is the
 dated journal of each working session, and [ISSUES.md](ISSUES.md) tracks the open
-issues and what to do next. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
+issues and what to do next. [The link-debugging notes](../../docs/worklog/topics/wheel-link-debugging.md) record how it got there, including
 the wrong turns — worth reading before adding a new diagnostic, since most of
 the lost time came from measurement mistakes rather than hardware.
 
@@ -78,7 +78,7 @@ controller on PB6/PB7. The 4-pin master–slave header is `MASTERSLAVE_USART 1`
 
 A component marked `015` sits in series between MCU pin 43 and header pin 5, so
 that pin fails a continuity beep test. It passes signal fine — see
-[DEBUGGING.md](DEBUGGING.md) for why "no beep" says less than it appears to.
+[the link-debugging notes](../../docs/worklog/topics/wheel-link-debugging.md) for why "no beep" says less than it appears to.
 
 With two masters, each gets its own UART — plain-UART masters transmit
 unprompted, so they cannot share a wire:
@@ -339,7 +339,7 @@ possibilities rather than identifying the far end.
 
 Reading the `r` and pull-up probes requires the hoverboard to be **powered** —
 PB7's pull-up exists only while the GD32 does. Each diagnostic checks this and
-refuses to run otherwise. [DEBUGGING.md](DEBUGGING.md) lists what each one
+refuses to run otherwise. [the link-debugging notes](../../docs/worklog/topics/wheel-link-debugging.md) lists what each one
 cannot see.
 
 ### Safety

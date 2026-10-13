@@ -5,7 +5,7 @@
 
 - 차체 설계와 부품 선정: [차체 설계 결정 기록 DECISIONS.md](../../hardware/vehicle/models/vehicle/DECISIONS.md) (D-NN)
 - 바퀴 제어기: [wheel-controller README](../../firmware/wheel-controller/README.md),
-  [WORKLOG](../../firmware/wheel-controller/WORKLOG.md), [ISSUES](../../firmware/wheel-controller/ISSUES.md)
+  [ISSUES](../../firmware/wheel-controller/ISSUES.md), [작업 일지](../worklog/README.md)
 
 ## 계층
 

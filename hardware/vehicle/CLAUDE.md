@@ -16,6 +16,7 @@ Python 코드로 파라메트릭 3D 모델을 만든다. CAD 라이브러리는
     `record.py vNN_이름` 한 번 (짓기 · 검증 · STEP · 뷰어 · 이미지 · README 자동 구역 · 버전 표)
   - 기록을 마친 버전은 고치지 않는다. 부품 label 은 버전 사이에 같은 부품이면 같은 이름.
   - 결정마다 `models/vehicle/DECISIONS.md` 에 D-NN (결정 · 이유 · 버린 대안 · 확인할 것), 조사 원자료는 `models/vehicle/research/날짜_주제.md`.
+  - 작업 일지는 누비 저장소 공통 `../../docs/worklog/YYYY-MM.md` 에 쓴다 (영역: 차체, 양식은 그 폴더 README). 이 폴더 안에 일지를 따로 만들지 않는다.
 - 부품은 **국내 구매처만** (해외직구 · 구매대행 안 됨), 가격은 조사로 확인한 것만 BOM 에 적는다. IP 방수 등급은 기준에서 뺐다.
 - 검증에는 대조군을 둔다 (간섭 0 이 '안 닿음' 인지 '잘 맞음' 인지 가르게). 겹침은 조각 (Solid) 하나씩 잰다 — 겹친 원기둥 · 구 묶음을 통째로 불리언하면 OCC 가 빈 결과를 낼 때가 있다.
 - 시뮬레이터: `models/vehicle/sim/` (웹 8748, `.claude/launch.json` 의 `vehicle-sim`). 새 버전을 기록하면 `web_export.py <버전>` 후 새로고침.

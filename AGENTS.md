@@ -24,15 +24,17 @@
 - `hardware/vehicle/` — **[hardware/vehicle/CLAUDE.md](hardware/vehicle/CLAUDE.md)를 따릅니다.** 명령은 이
   폴더에서 실행합니다(스크립트가 자기 파일 위치 기준으로 경로를 잡음). 안쪽 폴더 구조를 바꾸지 않고,
   기록을 마친 버전 폴더는 고치지 않습니다.
-- `firmware/wheel-controller/` — README · ISSUES · DEBUGGING을 먼저 읽습니다. 명령은 이 폴더에서
+- `firmware/wheel-controller/` — README · ISSUES와
+  [링크 디버깅 기록](docs/worklog/topics/wheel-link-debugging.md)을 먼저 읽습니다. 명령은 이 폴더에서
   `pio.cmd`로 실행합니다.
 
 ## 규칙
 
 - 문서는 한국어로 씁니다. 코드 식별자, 명령, 커밋 접두어는 영어입니다.
-- 작업을 마치면 `docs/worklog/YYYY-MM.md`에 그날 섹션을 추가합니다: 무엇을 왜 했고, 무엇을
-  확인했고(수치와 조건), 무엇이 남았는지. 일지는 여기 한 곳에만 씁니다. 통합 전 일지
-  (`firmware/wheel-controller/WORKLOG.md`, `hardware/vehicle/docs/journal/`)는 고치지 않습니다.
+- 작업을 마치면 `docs/worklog/YYYY-MM.md`에 그날 항목을 추가하고 그 달 목차 표와 README 연표에 한 줄씩
+  더합니다. 양식은 [docs/worklog/README.md](docs/worklog/README.md)를 따릅니다(제목 `날짜 (요일) · 영역: 제목`,
+  인용 줄, 정해진 본문 칸). 일지와 시간순 기록은 여기 한 곳에만 쓰고, 여러 날에 걸친 주제 정리는
+  `docs/worklog/topics/`에 씁니다. 옮겨 온 항목의 본문은 고치지 않습니다.
 - 결정 기록: 차체 설계는 `hardware/vehicle/models/vehicle/DECISIONS.md`에 D-NN, 여러 계층에 걸친
   것은 `docs/decisions/`에 ADR.
 - 바퀴 제어기의 열린 문제는 `firmware/wheel-controller/ISSUES.md`에서 관리합니다. 고치면 상태 칸과

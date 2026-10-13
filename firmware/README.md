@@ -19,7 +19,6 @@ PlatformIO 프로젝트를 기준으로 합니다.
 <보드-이름>/
 ├── README.md        현재 상태, 배선, 빌드 · 플래시 방법, 명령 목록
 ├── ISSUES.md        (있으면) 이 펌웨어의 열린 문제와 우선순위
-├── DEBUGGING.md     (있으면) 이 펌웨어만의 디버깅 기록
 ├── requirements.txt PlatformIO 등 Python 쪽 도구 버전
 ├── platformio.ini
 ├── src/
@@ -27,8 +26,8 @@ PlatformIO 프로젝트를 기준으로 합니다.
 └── tools/           이 펌웨어 전용 PC 도구 (GUI, 진단, 회귀 테스트)
 ```
 
-작업 기록은 펌웨어 폴더에 따로 두지 않고 [docs/worklog/](../docs/worklog/)에 씁니다.
-`wheel-controller/WORKLOG.md`는 통합 전 기록으로 남겨 둔 것입니다.
+작업 일지와 디버깅 기록은 펌웨어 폴더에 따로 두지 않고 [docs/worklog/](../docs/worklog/README.md)에 씁니다.
+바퀴 제어기의 통합 전 일지(`WORKLOG.md`)와 링크 디버깅 기록(`DEBUGGING.md`)도 그리로 옮겼습니다.
 
 ## 규칙
 

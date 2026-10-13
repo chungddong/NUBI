@@ -1,5 +1,7 @@
 # 알루미늄 프로파일 모빌리티 베이스 — 설계 기록
 
+> 영역: 차체 · 기간: 2026-07-27 ~ 08-07 무렵 · 원본: `hardware/vehicle/docs/build-log.md` (2026-10-13 옮김)
+
 build123d(코드로 3D 모델링)로 실내외 테스트용 모빌리티 로봇 베이스를 설계한 과정.
 잘 된 것보다 **막힌 것과 틀린 것**을 남기는 데 목적이 있다.
 
@@ -1350,7 +1352,7 @@ assert _fin_y < TOP_RAIL_Y < SHELL_Y - SHELL_T                    # 플랜지 �
 
 ### B. 현재 버전 — 4륜 스키드 스티어 (`models/swerve_base.py`, 기본값)
 
-![스키드 베이스 삼면도](images/41_skid_drawing_sheet.png)
+![스키드 베이스 삼면도](../../../hardware/vehicle/docs/images/41_skid_drawing_sheet.png)
 
 *페이로드 없는 기본 베이스. 개별 뷰는 `images/42~47_skid_view_*`.*
 

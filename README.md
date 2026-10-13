@@ -44,14 +44,14 @@ IMU iAHRS, GNSS GPS630입니다. 전원은 36 V 20 Ah 배터리이고, 비상정
 
 | 날짜 | 무엇 | 기록 |
 | --- | --- | --- |
-| 2026-07-27 ~ 28 | 첫 설계. 알루미늄 프로파일 프레임, 구동계 검토 끝에 호버보드 6.5" 허브모터로 정함 | [설계 일지](hardware/vehicle/docs/journal/) |
-| 07-28 ~ 08-05 | 스워브(조향 바퀴) 구동을 검토하다 접고, 고정 브라켓 + 3030 프로파일로 | 설계 일지 |
-| 08-07 ~ 08-27 | 휠 마운트 제작. 실물 PETG 브라켓 파손 분석(08-12) → 하부 클램프 Design D, FEA 파이프라인 | [FEA.md](hardware/vehicle/models/hoverboard_mount/FEA.md) |
-| 08-09 | 바퀴 제어기(ESP32) 첫 커밋. 호버보드 메인보드 UART 링크 | [WORKLOG](firmware/wheel-controller/WORKLOG.md) |
-| 09-10 ~ 09-15 | 전체 차량 뷰어, 형상 기반 BOM | 설계 일지 |
-| 09-17 ~ 09-22 | 탱크 모드 · 데드밴드, RDK 장애물 가드, Jetson 초파리 뇌 폐루프 주행, 메인보드 커스텀 펌웨어 | WORKLOG |
-| 10-04 ~ 10-05 | 차체 재설계 v01 ~ v29: 실외 외관, 실부품 선정(D-01 ~ D-21), 웹 시뮬레이터, 내부 배선 | [차체 버전 표](hardware/vehicle/models/vehicle/README.md) |
-| 10-13 | 누비 통합 저장소 | [작업 기록](docs/worklog/2026-10.md) |
+| 2026-07-27 ~ 28 | 첫 설계. 알루미늄 프로파일 프레임, 구동계 검토 끝에 호버보드 6.5" 허브모터로 정함 | [7월 일지](docs/worklog/2026-07.md) |
+| 07-28 ~ 08-05 | 스워브(조향 바퀴) 구동을 검토하다 접고, 고정 브라켓 + 3030 프로파일로 | [7월](docs/worklog/2026-07.md) · [8월](docs/worklog/2026-08.md) 일지 |
+| 08-07 ~ 08-27 | 휠 마운트 제작. 실물 PETG 브라켓 파손 분석(08-12) → 하부 클램프 Design D, FEA 파이프라인 | [8월 일지](docs/worklog/2026-08.md), [FEA.md](hardware/vehicle/models/hoverboard_mount/FEA.md) |
+| 08-09 | 바퀴 제어기(ESP32) 첫 커밋. 호버보드 메인보드 UART 링크 | [8월 일지](docs/worklog/2026-08.md) |
+| 09-10 ~ 09-15 | 전체 차량 뷰어, 형상 기반 BOM | [9월 일지](docs/worklog/2026-09.md) |
+| 09-17 ~ 09-22 | 탱크 모드 · 데드밴드, RDK 장애물 가드, Jetson 초파리 뇌 폐루프 주행, 메인보드 커스텀 펌웨어 | [9월 일지](docs/worklog/2026-09.md) |
+| 10-04 ~ 10-05 | 차체 재설계 v01 ~ v29: 실외 외관, 실부품 선정(D-01 ~ D-21), 웹 시뮬레이터, 내부 배선 | [10월 일지](docs/worklog/2026-10.md), [차체 버전 표](hardware/vehicle/models/vehicle/README.md) |
+| 10-13 | 누비 통합 저장소, 일지를 한 곳으로 | [10월 일지](docs/worklog/2026-10.md) |
 
 ## 저장소 구조
 
@@ -60,14 +60,13 @@ NUBI/
 ├── docs/                  문서
 │   ├── architecture/      시스템 구성, 계층 간 인터페이스
 │   ├── decisions/         설계 결정 기록 (ADR)
-│   ├── worklog/           월별 작업 기록
-│   ├── guides/            셋업 · 빌드 · 운용 방법
-│   ├── troubleshooting/   문제 해결과 실패 기록
+│   ├── worklog/           모든 작업 일지와 기록 (2026-07-27 ~, 월별 + 주제별)
+│   ├── guides/            셋업 · 빌드 · 운용 방법, 증상별 해결 방법
 │   ├── references/        데이터시트, 외부 자료 정리
 │   └── assets/            문서용 이미지 · 다이어그램
 ├── hardware/              기구 · 전장 설계
 │   ├── vehicle/           차체 설계 작업 공간 — build123d 버전 v00~v29, 결정 기록,
-│   │                      웹 시뮬레이터, FEA, 설계 일지 (구 HoverboardVehicle)
+│   │                      웹 시뮬레이터, FEA (구 HoverboardVehicle)
 │   └── electrical/        차체 모델 밖의 전장 문서 (핀맵, 회로도)
 ├── firmware/              MCU 펌웨어
 │   ├── wheel-controller/      LOLIN D32 (ESP32) 바퀴 제어기
@@ -98,8 +97,8 @@ NUBI/
 
 | 기존 위치 | 내용 | 옮길 곳 | 상태 |
 | --- | --- | --- | --- |
-| `F:\Develop\HoverboardVehicle\` ([GitHub](https://github.com/chungddong/HoverboardVehicle)) | 차체 설계 v00 ~ v29, 결정 기록, 부품 조사, 웹 시뮬레이터, FEA, 설계 일지(2026-07 ~) | [hardware/vehicle/](hardware/vehicle/) | **완료** (2026-10-13, 커밋 이력 포함) |
-| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · WORKLOG · ISSUES · DEBUGGING | [firmware/wheel-controller/](firmware/wheel-controller/) | **완료** (2026-10-13, 커밋 이력 포함) |
+| `F:\Develop\HoverboardVehicle\` ([GitHub](https://github.com/chungddong/HoverboardVehicle)) | 차체 설계 v00 ~ v29, 결정 기록, 부품 조사, 웹 시뮬레이터, FEA (설계 일지는 `docs/worklog/`로) | [hardware/vehicle/](hardware/vehicle/) | **완료** (2026-10-13, 커밋 이력 포함) |
+| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · ISSUES (WORKLOG · DEBUGGING은 `docs/worklog/`로) | [firmware/wheel-controller/](firmware/wheel-controller/) | **완료** (2026-10-13, 커밋 이력 포함) |
 | 이전 세션 스크래치패드 `mainboard-out/` | GD32 커스텀 빌드 (bin 2개, `config.master.h`, `config.slave.h`, 패치) | `firmware/hoverboard-mainboard/` | 폴더가 비어 있음. 채팅 첨부본을 찾거나 재빌드 ([ISSUES H1](firmware/wheel-controller/ISSUES.md)) |
 | RDK 보드 "sunrise" `~/Develop/autocar` | 깊이 카메라 장애물 가드 (`guard.py`, `obstacle.py`, `hoverlink.py`) | `experiments/2026-09-17_depth-guard/` | 보드에서 가져와야 함 |
 | Jetson "dongki" `~/Study/flysim` | 초파리 전뇌 폐루프 주행, `hover_link.py`, 웹 UI | `experiments/2026-09-18_flysim-drive/` | 보드에서 가져와야 함 |

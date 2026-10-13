@@ -18,7 +18,7 @@ hardware/
 | [vehicle/models/vehicle/research/](vehicle/models/vehicle/research/) | 부품 조사 원자료 (국내 구매처 · 가격) |
 | [vehicle/models/vehicle/sim/](vehicle/models/vehicle/sim/README.md) | 웹 시뮬레이터 (three.js) — 주행, 센서 시야, 전원, 사각지대, 전복, 비상정지, 자율주행, 복도 |
 | [vehicle/models/hoverboard_mount/](vehicle/models/hoverboard_mount/) | 재설계 전 단계: 휠 마운트, 하부 클램프 Design D, 구조해석(FEA), 제작용 STEP · STL · DXF |
-| [vehicle/docs/](vehicle/docs/) | 설계 일지(2026-07 ~ 09), 설계 기록, 이미지 |
+| [vehicle/docs/](vehicle/docs/) | 재설계 전 BOM · 바닥판 재단, 페이로드 규격, 일지 그림, 인터랙티브 설명 페이지. 설계 일지는 [docs/worklog/](../docs/worklog/README.md)로 옮김 |
 
 **규칙은 [vehicle/CLAUDE.md](vehicle/CLAUDE.md)를 따릅니다.** 요점만 옮기면:
 

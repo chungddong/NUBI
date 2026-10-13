@@ -1,5 +1,7 @@
 # Field notes: bringing up the hoverboard link
 
+> 영역: 바퀴 제어 · 기간: 2026-08-08 이전 · 원본: `firmware/wheel-controller/DEBUGGING.md` (2026-10-13 옮김) · 영어로 쓴 기록이라 원문 그대로 둡니다.
+
 What actually happened while getting a LOLIN D32 to drive a Gen2.x hoverboard
 mainboard, including the wrong turns. Kept because most of the wrong turns were
 caused by *measurement*, not by the hardware, and that failure mode is easy to
@@ -136,7 +138,7 @@ was flushed 250 ms *after* it. The stop was correct; something queued behind it
 overwrote it.
 
 Fixed with three independent guards and a regression test
-([tools/test_stop.py](tools/test_stop.py)) that reproduces the exact sequence
+([tools/test_stop.py](../../../firmware/wheel-controller/tools/test_stop.py)) that reproduces the exact sequence
 and fails against the old code.
 
 Lesson: a safety action must invalidate everything already in flight, not merely

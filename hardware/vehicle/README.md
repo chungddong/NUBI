@@ -24,7 +24,7 @@ Python 코드 ([build123d](https://build123d.readthedocs.io)) 로 설계한 기�
 | [`models/vehicle/sim/`](models/vehicle/sim/README.md) | 웹 시뮬레이터 (three.js) — 주행 · 센서 · 전원 · 사각지대 · 전복 · 비상정지 · 자율주행, 복도 환경 |
 | [`models/hoverboard_mount/`](models/hoverboard_mount/) | 재설계 전 단계 — 휠 마운트 · 하부 클램프 (Design D), **구조해석 FEA** ([`FEA.md`](models/hoverboard_mount/FEA.md) · [`CLAUDE_HANDOFF.md`](models/hoverboard_mount/CLAUDE_HANDOFF.md)), 제작용 STEP · STL · DXF |
 | `models/*.py` | 재설계 전 초기 스크립트 — `swerve_base` (4 륜 베이스) · `mobility_base` · `wheel_mount` · `wheeled_base` · `motor_stand` · `wheel_jig` · `tslot` (프로파일) · `drawings` · `export_cnc`, 렌더 도구 `iso_render` · `render` |
-| [`docs/build-log.md`](docs/build-log.md) · [`docs/journal/`](docs/journal/) | 설계 기록 · 작업일지 (2026-07 ~ 09, 브라우저로 여는 HTML) |
+| [`docs/worklog/`](../../docs/worklog/README.md) (저장소 공통) | 설계 일지 · 설계 이야기 · 정리본 (2026-07 ~). 2026-10-13 HTML 일지와 `build-log.md`를 Markdown으로 옮겨 합쳤다 |
 | [`docs/payload-interface.md`](docs/payload-interface.md) | 위에 올리는 모듈 규격 |
 | [`docs/interactive/`](docs/interactive/README.md) | 설명 페이지 (바퀴가 바깥으로 밀리는 이유 — 지렛대) |
 | [`docs/bom.md`](docs/bom.md) · `docs/floor_plate_cut*.md` | 재설계 전 BOM · 바닥판 재단 (지금 BOM 은 각 버전 폴더의 `bom.md`) |
