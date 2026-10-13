@@ -10,13 +10,40 @@ import struct
 from build123d import Location, export_stl
 
 from low_clamp import low_clamp, oem_clamp_block
+import parameters as P
+
+
+def variant_tag() -> str:
+    """형상 스위치를 파일명에 박는다 — 안 박으면 혀/날개/타이 판이 서로 덮어쓴다."""
+    tag = ""
+    if P.LOW_SIDE:
+        tag += "_side"
+    if P.LOW_SHELF:
+        tag += "_tongue" if P.SHELF_KIND == "tongue" else "_shelf"
+        if P.SHELF_KIND == "tongue" and P.SHELF_CABLE:
+            tag += "_cable"
+    if P.TONGUE:
+        tag += "_ttongue"
+    if P.TIE:
+        tag += "_tieprof" if P.TIE_KIND == "profile" else "_tierod"
+    return tag
 
 
 OUT = Path(__file__).parent / "output" / "stl"
-PARTS = (
-    ("design_d_lower_clamp_print", low_clamp),
-    ("oem_upper_clamp_reference_print", oem_clamp_block),
-)
+if P.LOW_SHELF and P.SHELF_KIND == "tongue" and P.SHELF_CABLE:
+    # 케이블 통로는 좌우 대칭 두 벌이 필요하다 — 네 바퀴 케이블을 전부 차량 안쪽으로.
+    #   R (+x): 앞축 왼쪽 + 뒷축 오른쪽 / L (-x): 앞축 오른쪽 + 뒷축 왼쪽  (low_clamp.cable_side_for)
+    _tag = variant_tag()
+    PARTS = (
+        (f"design_d_lower_clamp_print{_tag}R", lambda: low_clamp(cable_side=+1)),
+        (f"design_d_lower_clamp_print{_tag}L", lambda: low_clamp(cable_side=-1)),
+        ("oem_upper_clamp_reference_print", oem_clamp_block),
+    )
+else:
+    PARTS = (
+        (f"design_d_lower_clamp_print{variant_tag()}", low_clamp),
+        ("oem_upper_clamp_reference_print", oem_clamp_block),
+    )
 
 
 def put_on_bed(part):

@@ -37,8 +37,18 @@ def structural(folder, exclude=EXCLUDE):
     u = np.linalg.norm(np.asarray(m.point_data["U"]), axis=1)
     pts = m.points
     r = P.TNUT_BOLT * 0.55                                   # 볼트 구멍 반경
-    far = np.array([min(abs(np.hypot(a - sx * P.LOW_POST_X, b - LC.CLAMP_CY))
-                        for sx in (-1, 1)) for a, b, _ in pts]) > r + exclude
+    x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
+    # 강체 고정한 구멍 벽 전부에서 exclude 만큼 밖 — 형상 스위치(LOW_SIDE/LOW_SHELF)를
+    # 케이스와 **같은 환경변수**로 맞춰 돌려야 한다. 안 맞으면 특이점을 구조응력으로 센다.
+    dist = np.full(len(pts), np.inf)
+    for sx in (-1, 1):
+        dist = np.minimum(dist, np.abs(np.hypot(x - sx * P.LOW_POST_X, y - LC.CLAMP_CY) - r))
+        if P.LOW_SIDE:
+            dist = np.minimum(dist, np.abs(np.hypot(x - sx * P.LOW_POST_X, z - LC.BOLT_Z) - r))
+    if P.LOW_SHELF:
+        for by in LC.SHELF_BOLT_YS:
+            dist = np.minimum(dist, np.abs(np.hypot(x, y - by) - r))
+    far = dist > exclude
     return s.max(), s[far].max(), u.max(), pts[int(np.argmax(s))]
 
 

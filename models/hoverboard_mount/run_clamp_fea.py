@@ -64,14 +64,75 @@ MATERIALS = {
              "nu": 0.38, "yield": 45.0},
 }
 
+# 혀(H 크로스 선반) 볼트 구멍 벽을 강체 고정 대신 **접지 스프링(z, DOF 3)** 으로
+# 잡는다. 값은 볼트 1개당 조인트 축강성 [N/mm] — 혀 볼트가 크로스 밑면 슬롯을
+# 문 뒤, 크로스 자체는 굽힘 없이 통째로 내려가려 하고 그것을 잡는 건 크로스
+# **양 끝**의 코너브라켓 조인트뿐이라, 실제 강성은 혀 강성과 그 조인트 강성의
+# 직렬이다 (타이는 좌우 클램프를 직접 잇는 순수 인장이라 프레임 조인트가 경로에
+# 없다). T슬롯 조인트 추정(립+너트 직렬): 경제형 스프링너트 23,430 / 표준
+# 스프링너트 61,363 / 드롭인 T너트 98,415 / 슬라이드 T너트 129,061 N/mm.
+# 0 또는 미설정이면 예전처럼 구멍 벽 강체 고정.
+SHELF_JOINT_K = float(os.environ.get("SHELF_JOINT_K", "0") or 0.0)
+# 같은 구멍 벽의 **y(DOF 2) 접지 스프링** [N/mm, 볼트 1개당]. SHELF_JOINT_K 가 있을 때만
+# 의미 있고, 0 이면 y 자유. 강체 고정 케이스에서 혀 구멍 벽이 Fy ≈ -730 N 을 받고
+# 레일 볼트가 +730 N 으로 되받는 — 혀가 y 방향 스트럿(EA/L) 노릇을 하는 — 경로가
+# 있는데, z 스프링만 달면 이 경로가 통째로 사라진다. 실물에서는 혀 윗면 마찰 →
+# 크로스 축력 → 끝 브라켓 → 레일 → 레일 볼트로 닫히는 고리라 강성이 유한하다.
+# 민감도용: KY=K (조인트급) / 아주 큰 값 (마찰 잠금·강체) 으로 위아래를 재 본다.
+SHELF_JOINT_KY = float(os.environ.get("SHELF_JOINT_KY", "0") or 0.0)
+
+def design_variant() -> str:
+    """형상 스위치를 이름에 박는다. 안 박으면 타이/플랜지/선반 결과가 서로 덮어쓴다 (실제로 그랬다)."""
+    tag = ""
+    if P.LOW_SIDE:
+        tag += "_side"
+    if P.LOW_SHELF:
+        tag += "_tongue" if P.SHELF_KIND == "tongue" else "_shelf"
+        if P.SHELF_KIND == "tongue" and getattr(P, "SHELF_CABLE", False):
+            tag += "_cable"
+    if P.TONGUE:
+        tag += "_ttongue"
+    if P.TIE:
+        tag += "_tieprof" if P.TIE_KIND == "profile" else "_tierod"
+    return tag
+
+
+def export_design_d_step() -> Path:
+    """현재 파라미터로 Design D STEP 을 새로 뽑는다 — 경계조건과 형상이 항상 같은 스위치를 본다."""
+    from build123d.exporters3d import export_step
+    out = HERE / "output" / "step" / f"low_clamp_design_d{design_variant()}.step"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if not export_step(LC.low_clamp(), str(out)):
+        raise RuntimeError(f"STEP export failed: {out}")
+    return out
+
+
+def _design_d_support() -> str:
+    parts = ["two bottom rail-fastener hole walls"]
+    if P.LOW_SIDE:
+        parts.append("four side rail-fastener hole walls")
+    if P.LOW_SHELF and SHELF_JOINT_K <= 0:
+        parts.append("two shelf H-cross fastener hole walls")
+    return " + ".join(parts)
+
+
+def shelf_joint_tag() -> str:
+    """혀 조인트 스프링 케이스는 폴더 이름에 _k<N/mm> 를 박아 강체 결과와 안 섞이게 한다."""
+    if P.LOW_SHELF and SHELF_JOINT_K > 0:
+        tag = f"_k{SHELF_JOINT_K:g}"
+        if SHELF_JOINT_KY > 0:
+            tag += f"_ky{int(SHELF_JOINT_KY)}"
+        return tag
+    return ""
+
+
 MODEL_INFO = {
     "design_d": {
         "step": DESIGN_D_STEP,
         "title": "Design-D lower clamp",
         "case_prefix": "clamp",
         "job": "design_d_lower_clamp",
-        "support": ("six bottom/side rail-fastener hole walls" if P.LOW_SIDE
-                    else "two bottom rail-fastener hole walls"),
+        "support": _design_d_support(),
         "seat_center_y": LC.CLAMP_CY,
     },
     "legacy_u": {
@@ -123,6 +184,7 @@ def classify_nodes(mesh_size: float, model: str):
 
     load_nodes: list[int] = []
     fixed_nodes: set[int] = set()
+    shelf_holes: list[list[int]] = []   # 구멍별 혀 볼트 벽 노드 (SHELF_JOINT_K > 0 일 때만)
     if model == "design_d":
         # Wheel axle seat: cylindrical cut with its axis parallel to global Y.
         seat_r = P.AXLE_DIAMETER / 2 + P.SADDLE_SEAT_FIT
@@ -164,6 +226,29 @@ def classify_nodes(mesh_size: float, model: str):
                     and abs(y - LC.CLAMP_CY) >= LC.FLANGE_Y - tol
                 ):
                     fixed_nodes.add(tag)
+        # 선반 볼트 — H 크로스 밑면 슬롯(x=0) 에 물린다. 선반이 없으면 구멍도 없다.
+        # 구멍별로 따로 모은다: SHELF_JOINT_K 가 있으면 강체 고정 대신 볼트당 K 를
+        # 그 구멍의 노드 수로 나눈 접지 스프링(z)이 되는데, 두 구멍의 노드 수가
+        # 다를 수 있어 합쳐 두면 볼트당 강성이 어긋난다.
+        if P.LOW_SHELF:
+            shelf_cbore_top = LC.SHELF_BOT + LC.SHELF_CBORE[1]
+            for by in LC.SHELF_BOLT_YS:
+                hole: set[int] = set()
+                for tag in surface:
+                    x, y, z = coords[tag]
+                    if (
+                        abs(math.hypot(x, y - by) - hole_r) <= tol
+                        and shelf_cbore_top - tol <= z <= LC.SHELF_TOP + tol
+                    ):
+                        hole.add(tag)
+                if len(hole) < 6:
+                    raise RuntimeError(
+                        f"Too few shelf hole-wall nodes at y={by:g}: {len(hole)}")
+                hole -= fixed_nodes
+                if SHELF_JOINT_K > 0:
+                    shelf_holes.append(sorted(hole))
+                else:
+                    fixed_nodes |= hole
     elif model in {"legacy_u", "legacy_u_nogusset"}:
         # Original wheel_mount.py coordinate system: axle centre z=79.35 mm,
         # seat centre y=-55 mm, and the 3030 rail centre y=-50 mm.
@@ -206,9 +291,21 @@ def classify_nodes(mesh_size: float, model: str):
         for tag in surface:
             x, y, z = coords[tag]
             for sx in ((-1, 1) if P.TIE_N == 2 else (0,)):
-                if (abs(math.hypot(x - sx * P.TIE_X, z - P.TIE_Z) - tap_r) <= tol
+                if (P.TIE_KIND == "rod"
+                        and abs(math.hypot(x - sx * P.TIE_X, z - P.TIE_Z) - tap_r) <= tol
                         and y0 - tol <= y <= y0 + P.TIE_ENGAGE + tol):
                     tie_nodes.add(tag)
+        if P.TIE_KIND == "profile":
+            # 3030 타이는 코너 브래킷 탭 4곳으로 물린다. 탭이 z 두 단이라
+            # 회전을 직접 잡아 준다 (전산볼트는 한 단이라 지레로만 잡는다).
+            brk_r = (P.OEM_BOLT_D - 1.0) / 2
+            for tag in surface:
+                x, y, z = coords[tag]
+                for sx in (-1, 1):
+                    for bz in P.TIE_BRK_Z:
+                        if (abs(math.hypot(x - sx * P.TIE_BRK_X, z - bz) - brk_r) <= tol
+                                and y0 - tol <= y <= y0 + P.TIE_BRK_TAP + tol):
+                            tie_nodes.add(tag)
         tie_nodes -= fixed_nodes
 
     # 구멍 개수가 모델마다 다르다 (Design-D 는 플랜지 유무로 6 또는 2).
@@ -218,17 +315,20 @@ def classify_nodes(mesh_size: float, model: str):
             f"Too few rail-fastener support nodes: {len(fixed_nodes)} < {min_fixed}")
     if set(load_nodes) & fixed_nodes:
         raise RuntimeError("Load and support node sets overlap")
-    return coords, sorted(fixed_nodes), sorted(load_nodes), sorted(tie_nodes)
+    shelf_all = set().union(*shelf_holes) if shelf_holes else set()
+    if shelf_all & (set(load_nodes) | fixed_nodes | tie_nodes):
+        raise RuntimeError("Shelf spring nodes overlap load/support/tie node sets")
+    return coords, sorted(fixed_nodes), sorted(load_nodes), sorted(tie_nodes), shelf_holes
 
 
-def create_mesh(case_dir: Path, mesh_size: float, model: str):
+def create_mesh(case_dir: Path, mesh_size: float, model: str, info=None):
     raw_inp = case_dir / "clamp_mesh_raw.inp"
     msh = case_dir / "clamp_mesh.msh"
     gmsh.initialize()
     try:
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber("General.Verbosity", 2)
-        info = MODEL_INFO[model]
+        info = info or MODEL_INFO[model]
         gmsh.model.add(str(info["job"]))
         imported = gmsh.model.occ.importShapes(str(info["step"]))
         gmsh.model.occ.synchronize()
@@ -255,7 +355,8 @@ def create_mesh(case_dir: Path, mesh_size: float, model: str):
         gmsh.model.mesh.optimize("HighOrderElastic", niter=5)
         gmsh.model.mesh.optimize("HighOrder", niter=5)
 
-        coords, fixed_nodes, load_nodes, tie_nodes = classify_nodes(mesh_size, model)
+        coords, fixed_nodes, load_nodes, tie_nodes, shelf_holes = classify_nodes(
+            mesh_size, model)
         element_types, element_tags, _ = gmsh.model.mesh.getElements(3)
         element_ids: list[int] = []
         for element_type, tags in zip(element_types, element_tags):
@@ -266,7 +367,7 @@ def create_mesh(case_dir: Path, mesh_size: float, model: str):
 
         gmsh.write(str(msh))
         gmsh.write(str(raw_inp))
-        return raw_inp, coords, fixed_nodes, load_nodes, tie_nodes, element_ids
+        return raw_inp, coords, fixed_nodes, load_nodes, tie_nodes, shelf_holes, element_ids
     finally:
         gmsh.finalize()
 
@@ -284,7 +385,9 @@ def build_solver_deck(
     seat_center_y: float,
     material: dict[str, float | str],
     load_sign: float,
+    shelf_holes: list[list[int]] | None = None,
 ):
+    shelf_holes = shelf_holes or []
     shutil.copyfile(raw_inp, job_inp)
     total_vertical = load_sign * load_n
     load_terms: list[tuple[str, list[int], float, float]] = []
@@ -334,15 +437,40 @@ def build_solver_deck(
             # 실제보다 좋게 나온다 — 나사봉은 12,690 N/mm 짜리 탄성체다.
             # 좌우 대칭이라 타이 중점은 안 움직이므로, 클램프 하나가 느끼는
             # 등가 접지강성은 축강성의 2배다 (양끝이 각각 delta 씩 벌어진다).
-            _At = {6.0: 20.1, 8.0: 36.6, 10.0: 58.0, 12.0: 84.3}[P.TIE_ROD]
-            _L = 2 * (210.0 - P.LOW_D / 2 + P.TIE_ENGAGE)
-            _k = 2.0 * 206000.0 * _At * P.TIE_N / _L / len(tie_nodes)  # 강철
+            if P.TIE_KIND == "profile":
+                _EA, _L = 69000.0 * 406.0, P.TIE_PROF_LEN      # 3030 알루미늄
+            else:
+                _At = {6.0: 20.1, 8.0: 36.6, 10.0: 58.0, 12.0: 84.3}[P.TIE_ROD]
+                _EA, _L = 206000.0 * _At * P.TIE_N, P.TIE_ROD_LEN   # 강철 전산볼트
+            _k = 2.0 * _EA / _L / len(tie_nodes)
             _e0 = max(element_ids) + 1
             stream.write("*ELEMENT,TYPE=SPRING1,ELSET=ETIE\n")
             for _i, _n in enumerate(tie_nodes):
                 stream.write(f"{_e0 + _i},{_n}\n")
             stream.write("*SPRING,ELSET=ETIE\n2\n")
             stream.write(f"{_k:.6g}\n")
+        if shelf_holes:
+            # 혀 볼트 구멍 벽을 **접지 스프링(z)** 으로 잡는다. 볼트 1개당 조인트
+            # 축강성 SHELF_JOINT_K 를 그 구멍의 노드 수로 나눠 노드마다 건다 —
+            # 구멍 벽 노드는 거의 같이 움직이므로 합이 K·u_z 가 된다. x/y 는
+            # 자유다 (레일 볼트 2개가 x/y/z 강체라 강체 모드는 없다).
+            _e0 = max(element_ids) + 1 + len(tie_nodes)
+            for _i, _hole in enumerate(shelf_holes, start=1):
+                _k = SHELF_JOINT_K / len(_hole)
+                stream.write(f"*ELEMENT,TYPE=SPRING1,ELSET=ESHELF{_i}\n")
+                for _j, _n in enumerate(_hole):
+                    stream.write(f"{_e0 + _j},{_n}\n")
+                _e0 += len(_hole)
+                stream.write(f"*SPRING,ELSET=ESHELF{_i}\n3\n")
+                stream.write(f"{_k:.6g}\n")
+                if SHELF_JOINT_KY > 0:
+                    _ky = SHELF_JOINT_KY / len(_hole)
+                    stream.write(f"*ELEMENT,TYPE=SPRING1,ELSET=ESHELFY{_i}\n")
+                    for _j, _n in enumerate(_hole):
+                        stream.write(f"{_e0 + _j},{_n}\n")
+                    _e0 += len(_hole)
+                    stream.write(f"*SPRING,ELSET=ESHELFY{_i}\n2\n")
+                    stream.write(f"{_ky:.6g}\n")
         stream.write("*STEP,NLGEOM=NO\n")
         stream.write("*STATIC\n")
         stream.write("*CLOAD\n")
@@ -360,6 +488,12 @@ def build_solver_deck(
             write_set(stream, "NSET", "TIE_WALLS", tie_nodes)
             stream.write("*NODE PRINT,NSET=TIE_WALLS,TOTALS=YES\n")
             stream.write("RF\n")
+        for _i, _hole in enumerate(shelf_holes, start=1):
+            # 스프링 노드에는 RF 가 안 찍힌다 (SPC 가 아니라서). U 합을 찍어 두면
+            # 볼트 반력 = -(K/n)·ΣU_z 를 .dat 에서도 검산할 수 있다.
+            write_set(stream, "NSET", f"SHELF_HOLE_{_i}", _hole)
+            stream.write(f"*NODE PRINT,NSET=SHELF_HOLE_{_i},TOTALS=YES\n")
+            stream.write("U\n")
         stream.write("*END STEP\n")
     return load_terms
 
@@ -420,7 +554,44 @@ def convert_and_summarize(frd: Path):
     return vtu, point_keys, max_mises, max_disp
 
 
-def support_reaction_summary(vtu: Path, model: str):
+def shelf_spring_reactions(
+    vtu_points: np.ndarray,
+    displacements: np.ndarray,
+    coords: dict[int, tuple[float, float, float]],
+    shelf_holes: list[list[int]],
+) -> list[np.ndarray]:
+    """혀 접지 스프링의 반력 [Fx,Fy,Fz] 를 구멍별로 낸다.
+
+    CalculiX 는 SPC 노드에만 RF 를 찍는다 — 스프링 노드의 RF 는 1e-14 수준의
+    잔차뿐이라 (타이 케이스 .dat 에서 확인) 반력을 -k·u_z 로 직접 계산한다.
+    VTU 점 순서 = gmsh 노드 태그-1 (연속) 인지 좌표로 확인하고, 아니면 최근접
+    탐색으로 맞춘다. 부호는 RF 와 같다 (지지가 구조물에 주는 힘: 혀가 내려가면 +z).
+    """
+    out: list[np.ndarray] = []
+    for hole in shelf_holes:
+        k_node = SHELF_JOINT_K / len(hole)
+        idx = np.asarray(hole, dtype=int) - 1
+        want = np.asarray([coords[n] for n in hole])
+        ok = idx.max() < len(vtu_points) and np.abs(vtu_points[idx] - want).max() < 1e-3
+        if not ok:
+            from scipy.spatial import cKDTree
+            dist, idx = cKDTree(vtu_points).query(want)
+            if dist.max() > 1e-3:
+                raise RuntimeError(
+                    f"Shelf spring nodes not found in VTU (max mismatch {dist.max():.4g} mm)")
+        fz = -k_node * float(displacements[idx, 2].sum())
+        fy = -(SHELF_JOINT_KY / len(hole)) * float(displacements[idx, 1].sum()) \
+            if SHELF_JOINT_KY > 0 else 0.0
+        out.append(np.array([0.0, fy, fz]))
+    return out
+
+
+def support_reaction_summary(
+    vtu: Path,
+    model: str,
+    coords: dict[int, tuple[float, float, float]] | None = None,
+    shelf_holes: list[list[int]] | None = None,
+):
     """Sum CalculiX nodal reactions by physical rail-fastener location."""
     mesh = meshio.read(vtu)
     points = np.asarray(mesh.points)
@@ -428,6 +599,11 @@ def support_reaction_summary(vtu: Path, model: str):
     active = np.linalg.norm(reactions, axis=1) > 1e-12
     groups: list[tuple[str, np.ndarray]] = []
     tol = 0.55
+    spring = (
+        shelf_spring_reactions(points, np.asarray(mesh.point_data["U"])[:, :3],
+                               coords, shelf_holes)
+        if shelf_holes and coords is not None else None
+    )
 
     if model == "design_d":
         for sx, side_name in ((-1, "left"), (1, "right")):
@@ -458,6 +634,20 @@ def support_reaction_summary(vtu: Path, model: str):
                 groups.append(
                     (f"side_{side_name}_{face_name}", reactions[side].sum(axis=0))
                 )
+        if P.LOW_SHELF and spring is not None:
+            # 접지 스프링 케이스: 구멍 벽에 RF 가 없으니 스프링 힘을 반력으로 적는다.
+            for i, force in enumerate(spring, start=1):
+                groups.append((f"shelf_{i}", force))
+        elif P.LOW_SHELF:
+            for i, by in enumerate(LC.SHELF_BOLT_YS, start=1):
+                radial = np.hypot(points[:, 0], points[:, 1] - by)
+                shelf = (
+                    active
+                    & (np.abs(radial - P.TNUT_BOLT * 0.55) <= tol)
+                    & (points[:, 2] >= LC.SHELF_BOT + LC.SHELF_CBORE[1] - tol)
+                    & (points[:, 2] <= LC.SHELF_TOP + tol)
+                )
+                groups.append((f"shelf_{i}", reactions[shelf].sum(axis=0)))
     elif model in {"legacy_u", "legacy_u_nogusset"}:
         for sx, side_name in ((-1, "left"), (1, "right")):
             radial = np.hypot(points[:, 0] - sx * 15.0, points[:, 1] + 50.0)
@@ -615,12 +805,14 @@ def run_case(
         suffix += f"_e{eccentricity_mm:g}mm"
     if load_direction == "upward":
         suffix += "_up"
+    if model == "design_d":
+        suffix += design_variant() + shelf_joint_tag()
+        info = dict(info, step=export_design_d_step())
     case_name = f"{info['case_prefix']}_{int(load_n)}N_h{mesh_size:g}mm{suffix}"
     case_dir = OUT_ROOT / case_name
     case_dir.mkdir(parents=True, exist_ok=True)
-    raw_inp, coords, fixed_nodes, load_nodes, tie_nodes, element_ids = create_mesh(
-        case_dir, mesh_size, model
-    )
+    (raw_inp, coords, fixed_nodes, load_nodes, tie_nodes, shelf_holes,
+     element_ids) = create_mesh(case_dir, mesh_size, model, info)
     job_name = str(info["job"])
     job_inp = case_dir / f"{job_name}.inp"
     load_terms = build_solver_deck(
@@ -636,6 +828,7 @@ def run_case(
         float(info["seat_center_y"]),
         material,
         1.0 if load_direction == "upward" else -1.0,
+        shelf_holes,
     )
     frd = run_solver(case_dir, job_name)
     vtu, point_keys, max_mises, max_disp = convert_and_summarize(frd)
@@ -648,7 +841,11 @@ def run_case(
     render_result(
         vtu, preview_png, render_title, load_n, load_direction, max_mises, max_disp
     )
-    reaction_groups, reaction_total = support_reaction_summary(vtu, model)
+    reaction_groups, reaction_total = support_reaction_summary(
+        vtu, model, coords, shelf_holes)
+    shelf_spring_fz = sum(
+        float(force[2]) for name, force in reaction_groups if name.startswith("shelf_")
+    ) if shelf_holes else None
 
     report = case_dir / "summary.txt"
     lines = [
@@ -661,8 +858,15 @@ def run_case(
         f"Mesh target: {mesh_size:.3f} mm, quadratic C3D10 tetrahedra",
         f"Elements: {len(element_ids)}",
         f"Fixed nodes ({info['support']}): {len(fixed_nodes)}",
-        (f"Axle tie: M{P.TIE_ROD:.0f} x{P.TIE_N} as grounded springs, "
+        (f"Axle tie: {P.TIE_KIND} as grounded springs, "
          f"{len(tie_nodes)} nodes" if tie_nodes else "Axle tie: none"),
+        (f"Shelf joint: grounded z-springs, K={SHELF_JOINT_K:g} N/mm per bolt"
+         + (f" + y-springs KY={SHELF_JOINT_KY:g} N/mm per bolt" if SHELF_JOINT_KY > 0
+            else " (x/y free)")
+         + ", " + ", ".join(f"hole {i}: {len(h)} nodes x {SHELF_JOINT_K / len(h):.6g} N/mm"
+                            for i, h in enumerate(shelf_holes, start=1))
+         if shelf_holes else
+         ("Shelf joint: rigid hole walls" if P.LOW_SHELF else "Shelf joint: none")),
         f"Loaded axle-seat nodes: {len(load_nodes)}",
         "Load terms [set, nodes, total N, per-node N]:",
         *[
@@ -681,7 +885,14 @@ def run_case(
             for name, force in reaction_groups
         ],
         f"  total: [{reaction_total[0]:.6f}, {reaction_total[1]:.6f}, {reaction_total[2]:.6f}]",
-        f"Boundary model: rigid support on {info['support']}.",
+        *([f"Shelf spring reaction sum Fz: {shelf_spring_fz:.6f} N "
+           f"(= -K/n * sum Uz over each hole; included in total above)"]
+          if shelf_spring_fz is not None else []),
+        f"Boundary model: rigid support on {info['support']}"
+        + (f"; shelf bolt walls on grounded z-springs {SHELF_JOINT_K:g} N/mm per bolt"
+           + (f" and y-springs {SHELF_JOINT_KY:g} N/mm per bolt." if SHELF_JOINT_KY > 0
+              else " (x/y free).")
+           if shelf_holes else "."),
         "Interpretation: comparative linear-static model; no bolt preload/contact/fatigue yet.",
         f"FRD: {frd}",
         f"VTU: {vtu}",

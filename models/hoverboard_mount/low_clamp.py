@@ -42,11 +42,45 @@ RAIL_CZ = RAIL_BOT + P.EXTRUSION_H / 2                     # 레일 중심
 FLANGE_Y = P.EXTRUSION_W / 2 + P.LOW_RAIL_FIT              # 플랜지 안쪽면
 FLANGE_TOP = RAIL_CZ + P.TNUT_BOLT + 4                     # 옆 볼트 위로 남기는 살
 BOLT_Z = RAIL_CZ                                           # 옆면 슬롯 (3030 은 중앙 1줄)
+# H 크로스 선반 — 클램프 안쪽면에서 안쪽(-y)으로 뻗어 크로스 밑면을 문다.
+SHELF_FACE = CLAMP_CY - P.LOW_D / 2                        # 클램프 안쪽면 y (선반 뿌리)
+TONGUE = P.LOW_SHELF and P.SHELF_KIND == "tongue"
+SHELF_TOP = RAIL_BOT                                       # 윗면은 다리 윗면과 같은 높이
+SHELF_BOT = LOW_BOT if TONGUE else RAIL_BOT - P.SHELF_T    # 혀는 전체 높이
+SHELF_W = P.TONGUE_SHELF_W if TONGUE else (P.SHELF_W or P.LOW_W)
+SHELF_BOLT_YS = tuple(SHELF_FACE - b for b in P.SHELF_BOLT_IN)
+SHELF_CBORE = P.LOW_CBORE if TONGUE else P.SHELF_CBORE     # 혀는 레일볼트와 같은 스택
+# 케이블 통로 — 포켓 바닥에서 직선 S 만큼 가다가 반경 R 로 꺾여 옆면 x=±W/2 으로 나간다.
+# 원호 중심 (±R, y_bend-R). 옆면과 만나는 y: y_exit = y_bend - sqrt(R² - (R - W/2)²)
+CABLE_Y0 = SHELF_FACE - P.SHELF_NOTCH[1]                   # 포켓 바닥 (통로 시작)
+CABLE_Y_BEND = CABLE_Y0 - P.SHELF_CABLE_STRAIGHT           # 꺾임 시작
+CABLE_Y_EXIT = (CABLE_Y_BEND - (P.SHELF_CABLE_R ** 2 - (P.SHELF_CABLE_R - SHELF_W / 2) ** 2) ** 0.5
+                if TONGUE and P.SHELF_CABLE else None)
 
 assert P.LOW_POST_X - P.LOW_POST_W / 2 > P.OEM_W / 2, "다리가 기존 클램프와 부딪힌다"
 assert RAIL_BOT > CLAMP_SEAT_Z + P.OEM_T, "레일이 기존 클램프를 파고든다"
 assert P.LOW_CBORE[0] + 2 <= P.LOW_POST_W, "카운터보어가 다리보다 커서 벽이 안 남는다"
 assert P.LOW_H > P.AXLE_DIAMETER / 2 + 6, "축 시트 아래 살이 6mm 도 안 남는다"
+# 일체형 T 텅 — 카운터보어 양옆 자투리에 한 조각씩 (다리당 2, 총 4조각)
+_cb0 = P.LOW_POST_X - P.LOW_CBORE_D / 2
+_cb1 = P.LOW_POST_X + P.LOW_CBORE_D / 2
+_lg0 = P.LOW_POST_X - P.LOW_POST_W / 2
+_lg1 = P.LOW_POST_X + P.LOW_POST_W / 2
+TONGUE_XS = ((_lg0 + _cb0) / 2, (_cb1 + _lg1) / 2)     # 안쪽·바깥쪽 조각 중심
+TONGUE_NECK = P.EXTRUSION_SLOT - P.TONGUE_FIT          # 목 폭 (슬롯 입구)
+TONGUE_HEAD = P.EXTRUSION_CAVITY - P.TONGUE_FIT        # 머리 폭 (T 홈)
+TONGUE_NECK_H = P.EXTRUSION_WALL + 0.3                 # 립을 통과하는 높이
+TONGUE_HEAD_H = ((P.EXTRUSION_W / 2 - P.EXTRUSION_WALL)
+                 - P.EXTRUSION_CORE / 2) - 0.8         # 캐비티 안 높이
+
+if P.TONGUE:
+    for _x in TONGUE_XS:
+        assert _x - P.TONGUE_LEN / 2 > min(_lg0, _cb1) - 1e-6 or _x < P.LOW_POST_X, ""
+    _in0, _in1 = TONGUE_XS[0] - P.TONGUE_LEN / 2, TONGUE_XS[0] + P.TONGUE_LEN / 2
+    _ou0, _ou1 = TONGUE_XS[1] - P.TONGUE_LEN / 2, TONGUE_XS[1] + P.TONGUE_LEN / 2
+    assert _in0 > _lg0 and _in1 < _cb0, "안쪽 텅이 다리/카운터보어와 겹친다"
+    assert _ou0 > _cb1 and _ou1 < _lg1, "바깥 텅이 카운터보어/다리와 겹친다"
+
 TIE_GAP = 2 * (210.0 - P.LOW_D / 2)              # 좌우 클램프 안쪽면 사이
 TIE_GRIP = (P.TIE_ROD_LEN - TIE_GAP) / 2         # 한쪽 물림 (봉 길이에서 나온다)
 
@@ -85,8 +119,39 @@ assert not P.LOW_SIDE or side_bolt_len() <= P.LOW_SIDE_BOLT_LEN + 1e-6, (
     f"옆면 볼트가 {side_bolt_len():.2f}mm 필요하다")
 
 
-def low_clamp():
-    """각기둥 하나에서 필요한 것만 파낸다.
+def cable_channel(side=None):
+    """혀 안의 케이블 통로 솔리드 (빼기용). 축 끝 보어에서 나온 케이블이 지나갈 길 —
+    곧게 S 만큼 가다가 반경 R 로 90° 꺾어 옆면(±x)으로 나간다.
+
+    side: +1/-1 (None 이면 parameters.SHELF_CABLE_SIDE). 차량에 달면 좌우 클램프가 z 축
+    180° 로 돌아가므로 네 바퀴 케이블을 전부 차량 안쪽으로 내려면 **두 손잡이가 필요**하다
+    — cable_side_for() 가 바퀴 위치에서 골라 준다.
+    """
+    sx = 1 if (P.SHELF_CABLE_SIDE if side is None else side) >= 0 else -1
+    R = P.SHELF_CABLE_R
+    with BuildPart() as c:
+        with BuildLine() as cpath:
+            l1 = Line((0, CABLE_Y0 + 1.0, AZ), (0, CABLE_Y_BEND, AZ))
+            a1 = TangentArc(l1 @ 1, (sx * R, CABLE_Y_BEND - R, AZ), tangent=l1 % 1)
+            Line(a1 @ 1, (sx * (SHELF_W / 2 + 2.0), CABLE_Y_BEND - R, AZ))
+        with BuildSketch(Plane(origin=(0, CABLE_Y0 + 1.0, AZ), z_dir=(0, -1, 0))):
+            Circle(P.SHELF_CABLE_D / 2)
+        sweep(path=cpath.line)
+    return c.part
+
+
+def cable_side_for(x, sy):
+    """차량 좌표 (축 x 부호, 레일 y 부호) → 케이블이 차량 중심(x=0) 쪽으로 나가는 로컬 옆면.
+
+    로컬 +x 는 +y 쪽 클램프에서 차량 +x, -y 쪽(180° 회전)에서 차량 -x 다.
+    안쪽 = -sign(x) 방향이므로  side = -sign(x) * sign(sy).
+    """
+    sgn = lambda v: 1 if v >= 0 else -1
+    return -sgn(x) * sgn(sy)
+
+
+def low_clamp(cable_side=None):
+    """각기둥 하나에서 필요한 것만 파낸다. cable_side 는 케이블 통로 옆면(+1/-1, None=파라미터).
 
     처음엔 블록 + 다리 + 플랜지를 따로 쌓아 올렸다. 그랬더니 플랜지(바깥면 ±23.3)가
     몸체(±20)보다 3.3mm 튀어나오고, z=14.5 에서 18x40 기둥이 갑자기 18x8 지느러미로
@@ -111,17 +176,88 @@ def low_clamp():
                 FLANGE_TOP - RAIL_BOT + 2, mode=Mode.SUBTRACT)
         with Locations((0, CLAMP_CY, AZ)):                               # ③ 축 반원 시트
             Cylinder(r, P.LOW_D + 4, rotation=(90, 0, 0), mode=Mode.SUBTRACT)
+        if TONGUE:                                                       # H 크로스 혀
+            # 크로스 폭 그대로, 몸체 전체 높이. 윗면이 다리 윗면(레일 밑면)과 같은
+            # 높이라 크로스 밑면에 지압으로 닿고, 크로스 밑면 슬롯(x=0) 에 볼트 2개.
+            _h = SHELF_TOP - SHELF_BOT
+            with Locations((0, SHELF_FACE - P.SHELF_REACH / 2, (SHELF_TOP + SHELF_BOT) / 2)):
+                Box(SHELF_W, P.SHELF_REACH, _h)
+            # 뿌리 세로 모서리 (x=±W/2, y=SHELF_FACE) — 몸체 가운데 토막 안쪽면과 만나는 곳
+            _corners = [e for e in p.edges().filter_by(Axis.Z)
+                        if abs(abs(e.center().X) - SHELF_W / 2) < 0.05
+                        and abs(e.center().Y - SHELF_FACE) < 0.05
+                        and LOW_BOT - 0.1 < e.center().Z < LOW_TOP + 0.1]
+            if _corners:
+                try:
+                    fillet(_corners, radius=P.TONGUE_ROOT_R)
+                except Exception:
+                    pass
+            # 축 끝(안쪽면보다 1.6mm 돌출)을 피하는 포켓. **둥근 보어**로 판다 — 네모 포켓은
+            # 옆벽(x=±10)이 몸체 안쪽면·윗면과 만나는 세로 모서리에 FEA 최대 응력이 몰렸고,
+            # 그 오목 모서리는 몸체 윗면(z=-0.4)에서 끝나 OCCT fillet 도 안 먹었다. 축이
+            # 둥그니 여유도 둥글게 주면 모서리 자체가 없다.
+            pk = P.AXLE_DIAMETER + 2 * P.SHELF_CLR
+            with Locations((0, SHELF_FACE - P.SHELF_NOTCH[1] / 2, AZ)):
+                Cylinder(pk / 2, P.SHELF_NOTCH[1], rotation=(90, 0, 0), mode=Mode.SUBTRACT)
+            if P.SHELF_CABLE:                                            # 케이블 통로
+                add(cable_channel(cable_side), mode=Mode.SUBTRACT)
+            for by in SHELF_BOLT_YS:                                     # 볼트 2 + 카운터보어
+                with Locations((0, by, (SHELF_TOP + SHELF_BOT) / 2)):
+                    Cylinder(P.TNUT_BOLT * 0.55, _h + 2, mode=Mode.SUBTRACT)
+                with Locations((0, by, SHELF_BOT + SHELF_CBORE[1] / 2 - 0.01)):
+                    Cylinder(SHELF_CBORE[0] / 2, SHELF_CBORE[1], mode=Mode.SUBTRACT)
+        elif P.LOW_SHELF:                                                # H 크로스 선반 (wide)
+            # 안쪽면에서 뻗는 판. 윗면이 다리 윗면(레일 밑면)과 같은 높이라 크로스
+            # 밑면에 지압으로 닿고, 크로스 밑면 슬롯(x=0) 에 볼트 2개로 물린다.
+            with Locations((0, SHELF_FACE - P.SHELF_REACH / 2, (SHELF_TOP + SHELF_BOT) / 2)):
+                Box(SHELF_W, P.SHELF_REACH, P.SHELF_T)
+            # 축 끝이 안쪽면보다 튀어나온다 — 뿌리에 노치
+            nx, ny = P.SHELF_NOTCH
+            with Locations((0, SHELF_FACE - ny / 2 + 0.01, (SHELF_TOP + SHELF_BOT) / 2)):
+                Box(nx, ny + 0.02, P.SHELF_T + 2, mode=Mode.SUBTRACT)
+            # 노치 안쪽 모서리 (x=±nx/2, y=SHELF_FACE-ny) 의 세로 모서리만 둥글린다
+            _ny = SHELF_FACE - ny
+            _corners = [e for e in p.edges().filter_by(Axis.Z)
+                        if abs(abs(e.center().X) - nx / 2) < 0.05 and abs(e.center().Y - _ny) < 0.05
+                        and SHELF_BOT - 0.1 < e.center().Z < SHELF_TOP + 0.1]
+            if _corners:
+                fillet(_corners, radius=P.SHELF_NOTCH_R)
+            for by in SHELF_BOLT_YS:                                     # 볼트 2 + 카운터보어
+                with Locations((0, by, (SHELF_TOP + SHELF_BOT) / 2)):
+                    Cylinder(P.TNUT_BOLT * 0.55, P.SHELF_T + 2, mode=Mode.SUBTRACT)
+                with Locations((0, by, SHELF_BOT + SHELF_CBORE[1] / 2 - 0.01)):
+                    Cylinder(SHELF_CBORE[0] / 2, SHELF_CBORE[1], mode=Mode.SUBTRACT)
+        if P.TONGUE:                                                     # 일체형 T 텅
+            # 목은 슬롯 입구를 지나고, 머리가 립 밑에 걸린다. 스프링너트가 하던
+            # 일을 클램프 몸체가 직접 한다 — 물림 길이가 4배로 는다.
+            for sx in (-1, 1):
+                for tx in TONGUE_XS:
+                    with Locations((sx * tx, CLAMP_CY,
+                                    RAIL_BOT + TONGUE_NECK_H / 2)):
+                        Box(P.TONGUE_LEN, TONGUE_NECK, TONGUE_NECK_H)
+                    with Locations((sx * tx, CLAMP_CY,
+                                    RAIL_BOT + TONGUE_NECK_H + TONGUE_HEAD_H / 2)):
+                        Box(P.TONGUE_LEN, TONGUE_HEAD, TONGUE_HEAD_H)
         for sx in (-1, 1):                                               # 상부 클램프 탭 4
             for sy in (-1, 1):
                 with Locations((sx * P.OEM_BOLT[0], CLAMP_CY + sy * P.OEM_BOLT[1],
                                 (LOW_BOT + LOW_TOP) / 2)):
                     Cylinder((P.OEM_BOLT_D - 1.0) / 2, P.LOW_H + 2, mode=Mode.SUBTRACT)
-        if P.TIE:                                                        # 액슬 타이 전산볼트 탭
+        if P.TIE and P.TIE_KIND == "rod":                                 # 전산볼트 탭
             for sx in ((-1, 1) if P.TIE_N == 2 else (0,)):
                 with Locations((sx * P.TIE_X, CLAMP_CY - P.LOW_D / 2 + P.TIE_ENGAGE / 2,
                                 P.TIE_Z)):
                     Cylinder((P.TIE_ROD - 1.2) / 2, P.TIE_ENGAGE,
                              rotation=(90, 0, 0), mode=Mode.SUBTRACT)
+        elif P.TIE:                                                      # 코너 브래킷 탭
+            # 3030 타이를 옆에서 물리는 브래킷용. x 는 상부클램프 탭(17.6)과
+            # 카운터보어(26.4) 사이 창의 한가운데뿐이라 자리가 좁다.
+            for sx in (-1, 1):
+                for bz in P.TIE_BRK_Z:
+                    with Locations((sx * P.TIE_BRK_X,
+                                    CLAMP_CY - P.LOW_D / 2 + P.TIE_BRK_TAP / 2, bz)):
+                        Cylinder((P.OEM_BOLT_D - 1.0) / 2, P.TIE_BRK_TAP,
+                                 rotation=(90, 0, 0), mode=Mode.SUBTRACT)
         for sx in (-1, 1):                                               # 레일 밑면 볼트 2
             with Locations((sx * P.LOW_POST_X, CLAMP_CY,
                             (LOW_BOT + RAIL_BOT) / 2)):
@@ -141,9 +277,60 @@ def low_clamp():
     return p.part
 
 
+def tie_profile(rail_y=210.0):
+    """3030 여분을 잘라 만든 타이. 좌우 클램프 사이에 끼우고 코너 브래킷으로 문다."""
+    from extrusion_reference import extrusion_reference
+    if not P.TIE or P.TIE_KIND != "profile":
+        return []
+    prof = Rot(0, 0, 90) * extrusion_reference(P.TIE_PROF_LEN)   # X → Y 로 눕힌다
+    prof = Pos(0, 0, P.TIE_PROF_Z) * prof
+    prof.label = f"3030_tie_{P.TIE_PROF_LEN:.0f}"
+    return [prof]
+
+
+def tie_brackets(rail_y=210.0):
+    """3030 타이를 클램프 안쪽면에 붙이는 코너 브래킷 (한쪽 2개, 총 4개).
+
+    L 자 판이다. 한쪽 다리는 **클램프 안쪽면**(y 법선)에 붙어 M6 탭 2개로 조이고,
+    다른 다리는 **프로파일 옆면**(x 법선)에 붙어 슬롯 T너트로 조인다.
+    프로파일 끝과 클램프 면 사이 간극은 브래킷이 건넌다.
+    """
+    if not P.TIE or P.TIE_KIND != "profile":
+        return []
+    face = rail_y - P.LOW_D / 2                    # 클램프 안쪽면 y
+    pend = P.TIE_PROF_LEN / 2                      # 프로파일 끝 y
+    px = P.EXTRUSION_W / 2                         # 프로파일 옆면 x
+    t_ = 6.0                                       # 브래킷 두께
+    leg = 30.0                                     # 프로파일 쪽 다리 길이
+    zc = P.TIE_PROF_Z
+    h = 26.0                                       # 브래킷 높이 (z)
+    out = []
+    for sy in (-1, 1):
+        for sx in (-1, 1):
+            with BuildPart() as b:
+                with Locations((sx * (px + t_ / 2), sy * (face - t_ / 2), zc)):
+                    Box(t_, t_, h)                                  # 코너
+                with Locations((sx * (px + t_ / 2),
+                                sy * (face - t_ / 2 - (leg - t_) / 2 - t_ / 2), zc)):
+                    Box(t_, leg - t_, h)                            # 프로파일 쪽 다리
+                with Locations((sx * (px + t_ / 2 + (P.TIE_BRK_X - px) / 1.0),
+                                sy * (face - t_ / 2), zc)):
+                    Box(2 * (P.TIE_BRK_X - px) + t_, t_, h)         # 클램프 쪽 다리
+                for bz in P.TIE_BRK_Z:              # 클램프 탭 통과공
+                    with Locations((sx * P.TIE_BRK_X, sy * (face - t_ / 2), bz)):
+                        Cylinder(P.OEM_BOLT_D * 0.55, t_ + 2,
+                                 rotation=(90, 0, 0), mode=Mode.SUBTRACT)
+                with Locations((sx * (px + t_ / 2), sy * (face - leg / 2), zc)):
+                    Cylinder(P.OEM_BOLT_D * 0.55, t_ + 2,
+                             rotation=(0, 90, 0), mode=Mode.SUBTRACT)
+            b.part.label = f"tie_bracket_{len(out)+1}"
+            out.append(b.part)
+    return out
+
+
 def tie_rods(rail_y=210.0):
     """좌우 클램프를 잇는 인장 전산볼트 (차량 좌표). 클램프 탭에 직접 박힌다."""
-    if not P.TIE:
+    if not P.TIE or P.TIE_KIND != "rod":
         return []
     inner = rail_y - P.LOW_D / 2
     L = P.TIE_ROD_LEN
@@ -264,6 +451,36 @@ def bottom_button_head_bolts_reference(length=None):
     return out
 
 
+def shelf_button_head_bolts_reference(length=None):
+    """선반 카운터보어에서 H 크로스 하부 슬롯으로 체결하는 M6 볼트 2개. 선반이 없으면 빈 목록."""
+    if not P.LOW_SHELF:
+        return []
+    length = P.LOW_BOLT_LEN if length is None else length
+    out = []
+    for by in SHELF_BOLT_YS:
+        screw = (Pos(0, by, SHELF_BOT + SHELF_CBORE[1])
+                 * button_head_screw_reference(length))
+        screw.label = f"M6x{length:g}_shelf_button_head_{len(out) + 1}"
+        out.append(screw)
+    return out
+
+
+def h_cross(rail_y=210.0):
+    """액슬 라인 위 H 크로스 (3030, 좌우 레일 안쪽면 사이). 선반이 없으면 빈 목록.
+
+    차량 좌표(레일 y=±rail_y). 레일 중심 높이에 놓이며 축 끝(y=±185.1)과 기존
+    클램프 윗면 위를 지난다 — 여유는 verify() 가 잰다.
+    """
+    if not P.LOW_SHELF:
+        return []
+    from extrusion_reference import extrusion_reference
+    L = 2 * rail_y - P.EXTRUSION_W                   # 레일 안쪽면 사이
+    prof = Rot(0, 0, 90) * extrusion_reference(L)    # X → Y 로 눕힌다
+    prof = Pos(0, 0, RAIL_CZ) * prof
+    prof.label = f"3030_h_cross_{L:.0f}"
+    return [prof]
+
+
 def oem_button_head_bolts_reference(length=20.0):
     """기존 상부 클램프를 하부 클램프 M6 탭에 조이는 볼트 4개."""
     out = []
@@ -324,6 +541,14 @@ def load_paths(w=None):
 
 def report(w=None):
     w = w or P.DESIGN_W
+    if P.LOW_SHELF:
+        if TONGUE and P.SHELF_CABLE:
+            print(f"[케이블] Ø{P.SHELF_CABLE_D:.0f} 통로: 축 끝 → 직선 {P.SHELF_CABLE_STRAIGHT:.0f} → R{P.SHELF_CABLE_R:.0f} → "
+                  f"{'+' if P.SHELF_CABLE_SIDE >= 0 else '-'}x 옆면 출구 y≈{CABLE_Y_EXIT:.1f}")
+        print(f"[선반:{P.SHELF_KIND}] 안쪽면 y={SHELF_FACE:.1f} 에서 {P.SHELF_REACH:.0f}mm, {SHELF_W:.1f}x{SHELF_TOP - SHELF_BOT:.1f}t, "
+              f"볼트 y={SHELF_BOLT_YS[0]:.1f}/{SHELF_BOLT_YS[1]:.1f} (레일 바깥모서리 지레 "
+              f"{CLAMP_CY + P.EXTRUSION_W/2 - SHELF_BOLT_YS[0]:.0f}/{CLAMP_CY + P.EXTRUSION_W/2 - SHELF_BOLT_YS[1]:.0f}mm, "
+              f"레일볼트 {P.EXTRUSION_W:.0f}/2={P.EXTRUSION_W/2:.0f}mm)")
     print(f"[Design D] {P.EXTRUSION} / 옆 플랜지 {'있음' if P.LOW_SIDE else '없음'}"
           f" / 하중 {w:.0f} N")
     for name, v, lim, unit, why in load_paths(w):
@@ -355,6 +580,56 @@ def verify():
             v = x.volume if x is not None else 0.0
             if v > 1.0:
                 bad.append(f"간섭 {na} x {nb}: {v:.0f} mm3")
+    if P.LOW_SHELF:
+        ax = axle_solid().bounding_box()
+        # 노치 바닥(y) 이 축 끝보다 안쪽으로 SHELF_CLR 이상
+        notch_floor = SHELF_FACE - P.SHELF_NOTCH[1]
+        if not (ax.min.Y - notch_floor >= P.SHELF_CLR - 1e-6):
+            bad.append(f"선반 노치/포켓이 축 끝을 못 피한다: 축 끝 y={ax.min.Y:.1f}, 바닥 {notch_floor:.1f}")
+        if not TONGUE and P.SHELF_NOTCH[0] < P.AXLE_DIAMETER + 2 * P.SHELF_CLR:
+            bad.append("선반 노치 폭이 축 지름 + 여유보다 좁다")
+        x = part & axle_solid()
+        if x is not None and x.volume > 1.0:
+            bad.append(f"간섭 low_clamp x axle(선반): {x.volume:.0f} mm3")
+        oem_in = CLAMP_CY - P.OEM_H / 2                                  # 기존 클램프 안쪽 끝
+        if not (oem_in - SHELF_FACE >= P.SHELF_CLR - 1e-6):
+            bad.append(f"선반 뿌리가 기존 클램프와 겹친다: 클램프 안쪽 {oem_in:.1f} vs 선반면 {SHELF_FACE:.1f}")
+        # 볼트가 크로스 밑면 슬롯(x=0) 안에, 노치 밖에
+        for by in SHELF_BOLT_YS:
+            if by > notch_floor - SHELF_CBORE[0] / 2 - 2:
+                bad.append(f"선반 볼트 y={by:.1f} 카운터보어가 노치를 파고든다")
+        if TONGUE and P.SHELF_CABLE:
+            # 통로 솔리드와 볼트 구멍·카운터보어 솔리드가 실제로 겹치는지 (1.5mm 살 포함)
+            ch = cable_channel()
+            for by in SHELF_BOLT_YS:
+                with BuildPart() as bolt:
+                    with Locations((0, by, (SHELF_TOP + SHELF_BOT) / 2)):
+                        Cylinder(P.TNUT_BOLT * 0.55 + 1.5, SHELF_TOP - SHELF_BOT + 2)
+                    with Locations((0, by, SHELF_BOT + SHELF_CBORE[1] / 2)):
+                        Cylinder(SHELF_CBORE[0] / 2 + 1.5, SHELF_CBORE[1])
+                x = ch & bolt.part
+                if x is not None and x.volume > 0.5:
+                    bad.append(f"케이블 통로와 볼트 y={by:.1f} 사이 살이 1.5mm 미만 ({x.volume:.0f} mm3 겹침)")
+            # 통로 위·아래 살
+            if SHELF_TOP - (AZ + P.SHELF_CABLE_D / 2) < 4.0:
+                bad.append("케이블 통로 위 살이 4mm 미만")
+            if (AZ - P.SHELF_CABLE_D / 2) - SHELF_BOT < 4.0:
+                bad.append("케이블 통로 아래 살이 4mm 미만")
+            if SHELF_BOLT_YS[-1] - SHELF_CBORE[0] / 2 < SHELF_FACE - P.SHELF_REACH + 2.0:
+                bad.append("마지막 볼트 카운터보어가 혀 끝을 뚫는다")
+        # H 크로스 vs 축·기존 클램프 (차량 좌표에서 클램프 로컬로 환산해 z 만 본다)
+        cross_bot = RAIL_CZ - P.EXTRUSION_H / 2
+        if cross_bot - (AZ + P.AXLE_DIAMETER / 2) < P.SHELF_CLR:
+            bad.append("H 크로스 밑면이 축과 너무 가깝다")
+        if cross_bot - (CLAMP_SEAT_Z + P.OEM_T) < 1.0:
+            bad.append("H 크로스 밑면이 기존 클램프에 닿는다")
+        for c in h_cross(210.0):
+            c2 = Pos(0, CLAMP_CY - 210.0, 0) * c
+            for nm, o in (("low_clamp", part), ("oem_clamp", oem_clamp_block()), ("axle", axle_solid())):
+                x = c2 & o
+                v = x.volume if x is not None else 0.0
+                if v > 1.0:
+                    bad.append(f"간섭 h_cross x {nm}: {v:.0f} mm3")
     bb = part.bounding_box()
     if min(bb.size.X, bb.size.Y, bb.size.Z) < 3.0:
         bad.append("최소 두께 3mm 미만")

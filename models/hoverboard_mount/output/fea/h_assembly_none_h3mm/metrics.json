@@ -1,0 +1,90 @@
+{
+  "case": "none",
+  "label": "\ubcf4\uac15 \uc5c6\uc74c",
+  "title": "no reinforcement",
+  "step": "D:\\build123d\\models\\hoverboard_mount\\output\\step\\h_assembly_none.step",
+  "folder": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_none_h3mm",
+  "vtu": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_none_h3mm\\h_assembly.vtu",
+  "png": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_none_h3mm\\stress_deformed_800N.png",
+  "load_n": 800.0,
+  "load_direction": "upward",
+  "eccentricity_mm": 55.0,
+  "mesh_size": 3.0,
+  "mesh_min": 1.2,
+  "elements": 136612,
+  "elements_clamp": 93364,
+  "elements_alu": 43248,
+  "nodes": 232478,
+  "fixed_nodes": 912,
+  "solids": 2,
+  "camber_mrad_left": 10.81874626490657,
+  "camber_mrad_right": 10.821743855850015,
+  "uy_out_left": 0.08716544309165526,
+  "uy_out_right": 0.08747801819425445,
+  "uz_seat_left": 0.06231589051983584,
+  "uz_seat_right": 0.06224904236798906,
+  "splay_left": -0.771302073028681,
+  "splay_right": -0.771227356767444,
+  "umax_mm": 0.4029363519049293,
+  "umax_clamp_mm": 0.4029363519049293,
+  "clamp_structural_mpa": 16.802262384704743,
+  "clamp_structural_at": [
+    8.090120315551758,
+    -233.3000030517578,
+    78.94999694824219
+  ],
+  "clamp_max_mpa": 35.68469102915002,
+  "alu_max_mpa": 55.74457692893902,
+  "bond_exclude_mm": 2.0,
+  "rf_fixed": [
+    -0.0005175379998068053,
+    2.461999997116493e-05,
+    -1599.9997242399986
+  ],
+  "rf_all": [
+    -0.0005175380281071722,
+    2.4620144578336365e-05,
+    0.0027357606620582817
+  ],
+  "applied_z": 1600.0,
+  "solve_s": 61.57177400588989,
+  "total_s": 121.68675875663757,
+  "load_terms": [
+    [
+      "SEAT_L_OUTBOARD",
+      361,
+      2171.990298486435,
+      6.016593624616164
+    ],
+    [
+      "SEAT_L_INBOARD",
+      370,
+      -1371.9902984864352,
+      -3.708081887801176
+    ],
+    [
+      "SEAT_R_OUTBOARD",
+      362,
+      2173.3123768364812,
+      6.00362535037702
+    ],
+    [
+      "SEAT_R_INBOARD",
+      369,
+      -1373.3123768364812,
+      -3.721713758364448
+    ]
+  ],
+  "diag": {
+    "left": {
+      "rail_twist_mrad": 3.3608726666666664,
+      "rail_rise_mm": 0.028859229999999996,
+      "legtop_slope_mrad": 4.671404871659417
+    },
+    "right": {
+      "rail_twist_mrad": 3.361904666666666,
+      "rail_rise_mm": 0.029006249999999994,
+      "legtop_slope_mrad": 4.683185126040388
+    }
+  }
+}

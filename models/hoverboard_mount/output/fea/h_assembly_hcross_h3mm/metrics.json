@@ -1,0 +1,94 @@
+{
+  "case": "hcross",
+  "label": "H \ud06c\ub85c\uc2a4 + \ud600 (\uacb0\ud569)",
+  "title": "H cross 3030 x 390 + tongue (bonded)",
+  "step": "D:\\build123d\\models\\hoverboard_mount\\output\\step\\h_assembly_hcross.step",
+  "folder": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_hcross_h3mm",
+  "vtu": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_hcross_h3mm\\h_assembly.vtu",
+  "png": "D:\\build123d\\models\\hoverboard_mount\\output\\fea\\h_assembly_hcross_h3mm\\stress_deformed_800N.png",
+  "load_n": 800.0,
+  "load_direction": "upward",
+  "eccentricity_mm": 55.0,
+  "mesh_size": 3.0,
+  "mesh_min": 1.2,
+  "elements": 205544,
+  "elements_clamp": 127298,
+  "elements_alu": 78246,
+  "nodes": 356416,
+  "fixed_nodes": 912,
+  "solids": 1,
+  "camber_mrad_left": 6.243796779941765,
+  "camber_mrad_right": 6.250127428200885,
+  "uy_out_left": 0.02725859740875513,
+  "uy_out_right": 0.027295830740082076,
+  "uz_seat_left": 0.08367799949384405,
+  "uz_seat_right": 0.08286127526949384,
+  "splay_left": -0.46818667707962386,
+  "splay_right": -0.46865178068765817,
+  "umax_mm": 0.2539956336565701,
+  "umax_clamp_mm": 0.2539956336565701,
+  "clamp_structural_mpa": 31.158660429455114,
+  "clamp_structural_at": [
+    -10.0,
+    -186.7100067138672,
+    78.94999694824219
+  ],
+  "clamp_max_mpa": 31.158660429455114,
+  "alu_max_mpa": 32.64381019539539,
+  "bond_exclude_mm": 2.0,
+  "rf_fixed": [
+    0.0003676635000045003,
+    -7.894100002768523e-05,
+    -1599.999740035998
+  ],
+  "rf_all": [
+    0.00036766383879570624,
+    -7.894066995571307e-05,
+    6.996351416995533e-05
+  ],
+  "applied_z": 1600.0,
+  "solve_s": 105.33016204833984,
+  "total_s": 203.68892216682434,
+  "load_terms": [
+    [
+      "SEAT_L_OUTBOARD",
+      371,
+      2180.201860516666,
+      5.87655488009883
+    ],
+    [
+      "SEAT_L_INBOARD",
+      360,
+      -1380.2018605166659,
+      -3.8338940569907387
+    ],
+    [
+      "SEAT_R_OUTBOARD",
+      364,
+      2175.840250656626,
+      5.977583106199521
+    ],
+    [
+      "SEAT_R_INBOARD",
+      367,
+      -1375.8402506566258,
+      -3.748883516775547
+    ]
+  ],
+  "diag": {
+    "left": {
+      "rail_twist_mrad": 1.6892519999999998,
+      "rail_rise_mm": 0.02296438,
+      "legtop_slope_mrad": 2.0852090420696854,
+      "cross_uz_at_tongue_tip": -0.06609406666666666,
+      "cross_top_mid_uz": -0.1110795
+    },
+    "right": {
+      "rail_twist_mrad": 1.6938475833333333,
+      "rail_rise_mm": 0.02297666625,
+      "legtop_slope_mrad": 2.0858873942952854,
+      "cross_uz_at_tongue_tip": -0.06605986666666668,
+      "cross_top_mid_uz": -0.1110795
+    }
+  }
+}

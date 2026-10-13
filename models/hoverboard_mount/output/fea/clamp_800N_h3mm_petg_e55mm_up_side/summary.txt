@@ -1,0 +1,32 @@
+Design-D lower clamp open-source FEA
+Model key: design_d
+STEP: D:\build123d\models\hoverboard_mount\output\step\low_clamp_design_d_side.step
+Load: 800.0 N upward on axle seat
+Load-line eccentricity from seat centre: 55.000 mm
+Applied bending moment about X: 44.000 N m
+Mesh target: 3.000 mm, quadratic C3D10 tetrahedra
+Elements: 45536
+Fixed nodes (two bottom rail-fastener hole walls + four side rail-fastener hole walls): 1996
+Axle tie: none
+Loaded axle-seat nodes: 731
+Load terms [set, nodes, total N, per-node N]:
+  AXLE_SEAT_OUTBOARD: 361, 2170.604019, 6.012753514
+  AXLE_SEAT_INBOARD: 370, -1370.604019, -3.704335185
+Material: PETG isotropic estimate, E=2100 MPa, nu=0.380
+Reference yield strength: 45.0 MPa
+VTU point fields: E, ERROR, E_Mises, E_Principal, RF, S, S_Mises, S_Principal, U
+Max von Mises from VTU: 18.073357682326215 MPa
+Max displacement from VTU: 0.25638110947855614 mm
+Support reactions [Fx,Fy,Fz] N:
+  bottom_left: [150.194465, -21.216104, -152.749888]
+  side_left_inner: [-35.787328, 19.605707, 406.814706]
+  side_left_outer: [127.542063, 1.630457, -657.704822]
+  bottom_right: [-150.860955, -21.357411, -149.804099]
+  side_right_inner: [36.070873, 19.423725, 406.691615]
+  side_right_outer: [-127.159120, 1.913675, -653.247597]
+  total: [-0.000002, 0.000049, -800.000085]
+Boundary model: rigid support on two bottom rail-fastener hole walls + four side rail-fastener hole walls.
+Interpretation: comparative linear-static model; no bolt preload/contact/fatigue yet.
+FRD: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h3mm_petg_e55mm_up_side\design_d_lower_clamp.frd
+VTU: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h3mm_petg_e55mm_up_side\design_d_lower_clamp.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h3mm_petg_e55mm_up_side\stress_deformed_800N.png

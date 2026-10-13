@@ -74,11 +74,14 @@ def vehicle_frame():
 
 def mounted_wheels():
     motor0 = actual_motor_step_reference(axle_z=0)
-    lower0, upper0 = LC.low_clamp(), LC.oem_clamp_block()
+    upper0 = LC.oem_clamp_block()
+    # 혀 케이블 통로는 바퀴마다 방향이 다르다 (전부 차량 안쪽으로) — 좌우 두 벌
+    lowers_by_side = {s: LC.low_clamp(cable_side=s) for s in (+1, -1)}
     # 길이·개수를 박지 않는다. 플랜지를 끄면 옆 볼트는 빈 목록이 돌아오고,
     # 길이는 parameters.LOW_BOLT_LEN(실측 15mm)에서 나온다.
     side0 = LC.side_button_head_bolts_reference()
     bottom0 = LC.bottom_button_head_bolts_reference()
+    shelf0 = LC.shelf_button_head_bolts_reference()          # LOW_SHELF 가 꺼져 있으면 빈 목록
 
     motors, lowers, uppers, bolts = [], [], [], []
     for i, (x, sy) in enumerate((x, sy) for x in (-AXLE_X, AXLE_X)
@@ -87,11 +90,11 @@ def mounted_wheels():
         # 기본 형상은 +Y 차륜 기준(축이 -Y=차량 안쪽). -Y 측은 Z축 180° 회전.
         tf = Pos(x, y, AXLE_Z) * (Rot(0, 0, 180) if sy < 0 else Location())
         w = tf * motor0.moved(Location())
-        lo = tf * lower0.moved(Location())
+        lo = tf * lowers_by_side[LC.cable_side_for(x, sy)].moved(Location())
         up = tf * upper0.moved(Location())
         w.label, lo.label, up.label = f"휠모터{i+1}", f"하부클램프{i+1}", f"상부클램프{i+1}"
         motors.append(w); lowers.append(lo); uppers.append(up)
-        for j, b0 in enumerate(side0 + bottom0):
+        for j, b0 in enumerate(side0 + bottom0 + shelf0):
             b = tf * b0.moved(Location())
             b.label = f"프로파일볼트_{i+1}_{j+1}"
             bolts.append(b)
@@ -104,13 +107,18 @@ def tie_rods():
     좌우 클램프는 젖힘 모멘트로 **아래쪽이 서로 반대로 벌어진다.** 그래서 이 부재는
     순수 인장만 받는다 — 나사봉이면 충분하고, 클램프 안쪽면 탭에 바로 박힌다.
     """
-    rod0 = LC.tie_rods(RAIL_Y)
+    base = LC.tie_rods(RAIL_Y) + LC.tie_profile(RAIL_Y)
+    brk = LC.tie_brackets(RAIL_Y)
     out = []
     for i, x in enumerate((-AXLE_X, AXLE_X)):
-        for j, r0 in enumerate(rod0):
+        for j, r0 in enumerate(base):
             r = Pos(x, 0, AXLE_Z) * r0.moved(Location())
-            r.label = f"타이봉_{i+1}_{j+1}"
+            r.label = f"타이_{i+1}_{j+1}"
             out.append(r)
+        for j, k0 in enumerate(brk):
+            k = Pos(x, 0, AXLE_Z) * k0.moved(Location())
+            k.label = f"타이브래킷_{i+1}_{j+1}"
+            out.append(k)
     return out
 
 
@@ -124,9 +132,19 @@ def main():
         _group(bolts, f"M{P.TNUT_BOLT:.0f}x{P.LOW_BOLT_LEN:.0f}_프로파일체결볼트_{len(bolts)}개",
                "#30343a"),
     ]
+    hx = []
+    for i, x in enumerate((-AXLE_X, AXLE_X), start=1):      # H 크로스 (LOW_SHELF 일 때만)
+        for c0 in LC.h_cross(RAIL_Y):
+            c = Pos(x, 0, AXLE_Z) * c0.moved(Location())
+            c.label = f"H크로스_{i}"
+            hx.append(c)
+    if hx:
+        groups.append(_group(hx, f"H크로스_3030x{2*RAIL_Y - S:.0f}_{len(hx)}개", "#4f7fb0"))
     ties = tie_rods()
     if ties:
-        groups.append(_group(ties, f"액슬타이봉_M{P.TIE_ROD:.0f}x{2*(RAIL_Y-P.LOW_D/2+P.TIE_ENGAGE):.0f}_{len(ties)}개", "#b6483c"))
+        groups.append(_group(ties, (f"액슬타이_M{P.TIE_ROD:.0f}x{P.TIE_ROD_LEN:.0f}봉_{len(ties)}개"
+                     if P.TIE_KIND == "rod" else
+                     f"액슬타이_3030x{P.TIE_PROF_LEN:.0f}_{len(ties)}개"), "#b6483c"))
     set_port(PORT)
     show(*groups, names=[g.label for g in groups],
          colors=[g.color for g in groups],
