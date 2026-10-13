@@ -1,0 +1,24 @@
+* text=auto
+
+# 리눅스 보드(Jetson, RDK)에서 실행하는 파일은 LF로 고정
+*.sh    text eol=lf
+*.py    text eol=lf
+
+# 윈도우 스크립트
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# 바이너리
+*.FCStd binary
+*.stl   binary
+*.3mf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.pdf   binary
+*.bin   binary
+
+# 텍스트지만 diff가 의미 없는 것
+*.step  -diff
+*.stp   -diff
