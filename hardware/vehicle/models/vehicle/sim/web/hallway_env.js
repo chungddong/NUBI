@@ -115,6 +115,7 @@ export async function makeHallway(scene) {
       for (const [x, y] of b.corners) if (inside(poly, x, y)) return '가구';
     }
     for (const c of circles) {
+      if (c.off) continue;
       if (inside(poly, c[0], c[1]) || polyDist(poly, c[0], c[1]) < c[2]) return '사람';
     }
     return null;
@@ -127,9 +128,20 @@ export async function makeHallway(scene) {
     back: { x: 24.0, y: 0.0, yaw: Math.PI },
   };
   const names = { start: '복도 입구', mid: '복도 가운데', lounge: '라운지 앞', back: '되돌아오기' };
+
+  // 문 — 호수 (label) 가 있는 문과 라운지 출입문. 문이 바라보는 쪽 (원본 로컬 +z 를 rotY 만큼) 으로 0.8 m 앞이 '문 앞'.
+  // GPT 운전의 목표 고르기 · 층 안내 · 채점이 쓴다 (좌표는 GPT 에 주지 않는다).
+  const doors = data.objects.filter((o) => o.type === 'door' && (o.label || o.zone === 'lounge' || o.pos[0] > 30)).map((o) => {
+    const r = o.rotY ?? 0, nx = Math.sin(r), ny = -Math.cos(r);
+    const x = o.pos[0], y = -o.pos[2];
+    return { id: o.id, label: o.label ?? null, name: o.name, x, y, nx, ny, front: [x + 0.8 * nx, y + 0.8 * ny],
+      side: Math.abs(ny) > 0.7 ? (ny < 0 ? '왼쪽' : '오른쪽') : '끝' };
+  }).sort((a, b) => a.x - b.x);
   return {
-    kind: 'hallway', title: data.title, subtitle: data.subtitle, group, solids, ceilLayer: CEIL, height: () => 0, hits, spots, names,
+    kind: 'hallway', title: data.title, subtitle: data.subtitle, group, solids, ceilLayer: CEIL, doors, map: { segs, boxes },
+    height: () => 0, hits, spots, names,
     ramps: [], steps: [], sides: [], movers, update, bounds: [-3.5, -13.0, 48.0, 6.0],
-    setMovers: (on) => movers.forEach((w) => { w.on = on; w.m.visible = on; }),
+    // 끄면 화면 · 광선 투사 (깊이 · 라이다 — Raycaster 는 visible 을 안 보고 레이어만 본다) · 충돌에서 모두 뺀다
+    setMovers: (on) => movers.forEach((w) => { w.on = on; w.m.visible = on; w.m.layers.set(on ? 0 : 31); w.c.off = !on; }),
   };
 }

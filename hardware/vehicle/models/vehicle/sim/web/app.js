@@ -10,6 +10,7 @@ import { makeCoverage } from './coverage.js';
 import { makeStability } from './stability.js';
 import { makeNav } from './nav.js';
 import { makeHallway } from './hallway_env.js';
+import { makeAgent } from './agent.js';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -19,6 +20,9 @@ THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 const ENV = new URLSearchParams(location.search).get('env') === 'hallway' ? 'hallway' : 'course';
+// 카메라 — 기본은 차체 설계의 Gemini 336 앞 · 뒤. ?cam=xtion 이면 지금 실차의 Xtion Pro Live 앞 하나 (화각 58° × 45°,
+// 0.5 m 안쪽은 깊이 없음 = blind, 4 m 까지). 렌즈 자리는 설계의 앞 카메라 자리를 그대로 쓴다.
+const CAM = new URLSearchParams(location.search).get('cam') === 'xtion' ? 'xtion' : 'gemini';
 
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 const $ = (id) => document.getElementById(id);
@@ -52,6 +56,10 @@ scene.add(sun, sun.target);
 
 // ------------------------------------------------------------------ 데이터 · 차체
 const data = await (await fetch('data/vehicle.json')).json();
+if (CAM === 'xtion') {
+  data.cameras = [{ ...data.cameras[0], name: '앞 깊이 카메라', model: 'ASUS Xtion Pro Live', hfov: 58, vfov: 45,
+    near: 0.05, blind: 0.5, ideal: [0.8, 3.5], far: 4.0 }];
+}
 const bin = new Float32Array(await (await fetch('data/vehicle.bin')).arrayBuffer());
 $('loading').remove();
 $('ver').innerHTML = `${data.version} — ${data.title}<br>${data.date} · ${data.summary}`;
@@ -185,7 +193,10 @@ $('vmax').oninput = (e) => { st.vmax = +e.target.value; $('vmaxv').textContent =
 $('wmax').oninput = (e) => { st.wmax = +e.target.value; $('wmaxv').textContent = `${st.wmax.toFixed(1)} rad/s`; };
 // 환경 · 출발점 — 환경마다 출발점 단추를 만든다
 $('env').value = ENV;
-$('env').onchange = (e) => { location.search = e.target.value === 'hallway' ? '?env=hallway' : ''; };
+const goTo = (env, cam) => { location.search = [env === 'hallway' ? 'env=hallway' : '', cam === 'xtion' ? 'cam=xtion' : ''].filter(Boolean).map((s, i) => (i ? '&' : '?') + s).join(''); };
+$('env').onchange = (e) => goTo(e.target.value, CAM);
+$('camSel').value = CAM;
+$('camSel').onchange = (e) => goTo(ENV, e.target.value);
 $('spots').innerHTML = Object.keys(course.spots).map((k) => `<button data-go="${k}">${course.names[k] ?? k}</button>`).join('');
 $('envNote').textContent = ENV === 'hallway' ? `${course.title} — ${course.subtitle}. 벽 · 난간 · 고정 가구와 충돌, 사람 2 명이 복도를 오간다. 천장은 내 화면에서만 숨김 (차 카메라 · 깊이에는 있음).`
   : '상자 · 사람 크기 기둥 · 좁은 통로 (폭 0.8 m) · 턱 20 / 40 mm · 경사로 10° / 15° · 옆 경사 20°. 턱은 바퀴 반지름의 40 % 까지만 넘는다고 본다 (어림).';
@@ -529,3 +540,5 @@ window.__sim = {
   estopTest: () => runEstopTest(),
   goal: (x, y) => nav.setGoal(x, y, st),
 };
+// ⑤ GPT 운전 (카메라만) — agent.js · ../agent.py
+window.__sim.agent = makeAgent({ sim: window.__sim, sensors, course, st, place, $, data });

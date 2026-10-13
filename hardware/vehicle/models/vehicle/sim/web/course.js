@@ -193,11 +193,11 @@ export function makeCourse(scene) {
   function hits(pts) {
     for (const [x, y] of pts) {
       for (const b of boxes) if (x > b[0] && x < b[1] && y > b[2] && y < b[3]) return `장애물 (${(b[4] * 1000).toFixed(0)} mm 높이)`;
-      for (const c of circles) if (Math.hypot(x - c[0], y - c[1]) < c[2]) return '기둥';
+      for (const c of circles) if (!c.off && Math.hypot(x - c[0], y - c[1]) < c[2]) return '기둥';
     }
     // 장애물 모서리가 차 윤곽 안에 들어오는 경우 (가는 기둥) — 윤곽 사각형 안에 점이 있는지
     const xs = pts.slice(0, 4);
-    for (const c of circles) if (inside(xs, c[0], c[1])) return '기둥';
+    for (const c of circles) if (!c.off && inside(xs, c[0], c[1])) return '기둥';
     return null;
   }
   function inside(poly, x, y) {
@@ -222,5 +222,6 @@ export function makeCourse(scene) {
   group.updateMatrixWorld(true);         // 화면을 한 번도 안 그렸어도 광선 투사가 제자리를 보게
   const names = { start: '출발점', ramp10: '경사 10°', ramp15: '경사 15°', curb: '턱', corridor: '통로', side20: '옆 경사 20°' };
   return { kind: 'course', group, solids, height, hits, spots, names, ramps, steps, sides, movers, update, bounds: [-12, -10, 12, 10],
-    setMovers: (on) => movers.forEach((w) => { w.on = on; }) };
+    // 끄면 화면 · 광선 투사 (깊이 · 라이다 — Raycaster 는 visible 을 안 보고 레이어만 본다) · 충돌에서 모두 뺀다
+    setMovers: (on) => movers.forEach((w) => { w.on = on; w.m.visible = on; w.m.layers.set(on ? 0 : 31); w.c.off = !on; }) };
 }

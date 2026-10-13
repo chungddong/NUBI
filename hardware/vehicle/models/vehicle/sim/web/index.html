@@ -142,6 +142,26 @@
       <div class="note" id="navStatus"></div>
       <div class="note">라이다 광선이 지나간 칸은 비우고 맞은 칸은 채운다. 깊이 점은 벽 · 상자 옆 같은 세운 면만. A* (0.1 m 칸, 차 반폭 + 5 cm 부풀림) → 순수 추종 0.8 m/s. 0.5 s 앞을 미리 봐서 닿으면 제자리 회전 · 후진 · 대기, 지나갈 띠 안 장애물이 범퍼 앞 8 cm 면 멈춤, 2 s 끼면 뒤로.</div>
     </section>
+    <section id="agent">
+      <h2>⑤ GPT · Claude 운전 (카메라만)</h2>
+      <div class="note">앞 카메라 사진에 깊이로 잰 갈 수 있는 방향을 번호 화살표로 그려 모델에 보내고, 모델이 고른 행동 (가기 · 돌기 · 멈추기) 을 한다. '지도 · 위치' 로 지도 그림과 추정 위치 (오도메트리 · 시각 위치 인식 오차 흉내) 를 같이 줄 수 있다 — 진짜 위치는 '정답' 모드와 채점에만. API 키는 서버 쪽 (<kbd>sim/agent.local.json</kbd> 또는 OPENAI_API_KEY · ANTHROPIC_API_KEY).</div>
+      <div class="ctl"><span>목표</span><select id="agGoal" style="flex:1"></select></div>
+      <div class="ctl"><span>모델</span><select id="agModel" style="flex:1">
+        <optgroup label="OpenAI"><option value="gpt-6.1-sol">gpt-6.1-sol</option><option value="gpt-6-astra">gpt-6-astra</option>
+        <option value="gpt-6-luna">gpt-6-luna</option></optgroup>
+        <optgroup label="Anthropic"><option value="claude-opus-5-5">claude-opus-5-5</option><option value="claude-sonnet-5-5">claude-sonnet-5-5</option>
+        <option value="claude-haiku-5-5">claude-haiku-5-5</option></optgroup>
+        <option value="mock">모의 (API 없이 · 목표 모름)</option>
+      </select><select id="agEffort"><option>low</option><option selected>medium</option><option>high</option></select></div>
+      <div class="ctl"><span>지도 · 위치</span><select id="agPose" style="flex:1"></select></div>
+      <label class="tg"><input type="checkbox" id="agDir" checked> 층 안내 주기 (방 이름 · 순서, 좌표 없음)</label>
+      <label class="tg"><input type="checkbox" id="agStart" checked> 복도 입구에서 시작</label>
+      <div class="btns"><button id="agRun">시작</button><button id="agOne">한 걸음</button><button id="agStop">멈춤</button></div>
+      <div class="note" id="agStat" style="margin-top:6px"></div>
+      <img id="agImg" alt="GPT 에 보낸 마지막 사진" style="width:100%; display:none; margin-top:6px; border-radius:4px">
+      <img id="agMap" alt="GPT 에 보낸 마지막 지도" style="width:100%; display:none; margin-top:4px; border:1px solid var(--line); border-radius:4px">
+      <div id="agLog" class="note" style="max-height:260px; overflow-y:auto; margin-top:6px"></div>
+    </section>
     <section>
       <h2>전원 (추정 — DECISIONS D-04 식)</h2>
       <table class="kv">
@@ -164,6 +184,7 @@
     <section>
       <h2>환경 · 출발점</h2>
       <div class="ctl"><select id="env" style="flex:1"><option value="course">시험 코스</option><option value="hallway">복도 (실제 건물 3 층 · 영상 복원)</option></select></div>
+      <div class="ctl" style="margin-top:4px"><span>카메라</span><select id="camSel" style="flex:1"><option value="gemini">Gemini 336 앞 · 뒤 (차체 설계)</option><option value="xtion">Xtion Pro Live 앞 하나 (지금 실차)</option></select></div>
       <div class="note" id="envNote"></div>
       <label class="tg" id="ceilRow" hidden><input type="checkbox" id="ceil"> 천장 보기 (내 화면만 — 차 카메라 · 깊이에는 늘 있음)</label>
       <div class="btns" id="spots" style="margin-top:6px"></div>

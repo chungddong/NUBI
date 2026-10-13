@@ -7,3 +7,5 @@ matplotlib==3.11.1
 pillow==12.2.0
 vtk==9.6.2
 ezdxf==1.4.4
+# 차량 시뮬레이터 ⑤ Claude 운전 (models/vehicle/sim/agent_claude.py) — GPT 운전은 표준 라이브러리만 쓴다
+anthropic==1.13.0

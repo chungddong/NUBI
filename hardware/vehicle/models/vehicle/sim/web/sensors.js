@@ -63,6 +63,8 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
     return Math.abs(nW.z) < 0.7;
   }
 
+  // 앞 카메라 세로줄마다 장애물까지 수평 거리 (GPT 운전의 화살표가 쓴다). ang + = 왼쪽, rad
+  let frontCols = [];
   function castDepth() {
     const P = ptsGeo.attributes.position.array, C = ptsGeo.attributes.color.array;
     let k = 0, nearest = Infinity, gapA = Infinity, gapB = Infinity;
@@ -74,6 +76,9 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
       rig.getWorldPosition(o);
       rig.getWorldQuaternion(q);
       const tx = Math.tan(c.hfov / 2 * D2R), tz = Math.tan(c.vfov / 2 * D2R);
+      const cols = c.yaw === 0 ? new Array(NX).fill(c.far) : null;
+      // Xtion 처럼 가까이 (c.blind) 가 깊이 없음이면: 바닥이 0.65 ~ 2 m 에 보여야 할 광선이 너무 가까운 것에 막힌 비율로 '사각'
+      const bandN = new Array(NX).fill(0), blindN = new Array(NX).fill(0);
       let n = 0;
       for (let i = 0; i < NX; i++) {
         for (let j = 0; j < NZ; j++) {
@@ -82,8 +87,12 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
           ray.set(o, dvec);
           ray.near = c.near; ray.far = c.far;
           const hit = ray.intersectObjects(course.solids, false)[0];
+          const fh = w < 0 ? c.z / -w * Math.hypot(1, u) : Infinity;        // 평평한 바닥이면 닿을 수평 거리
+          const inBand = cols && c.blind && fh >= 0.65 && fh <= 2.0;
+          if (inBand) bandN[i]++;
           if (!hit) continue;
           const dist = hit.distance * Math.cos(Math.atan(Math.hypot(u, w)));   // 깊이 = 광축 방향 거리
+          if (c.blind && dist < c.blind) { if (inBand) blindN[i]++; continue; }   // 너무 가까움 → 깊이 없음 (점도 장애물도 아님)
           P[3 * k] = hit.point.x; P[3 * k + 1] = hit.point.y; P[3 * k + 2] = hit.point.z;
           const inIdeal = dist >= c.ideal[0] && dist <= c.ideal[1];
           col.setHSL(Math.min(dist / c.far, 1) * 0.66, 0.85, inIdeal ? 0.5 : 0.75);
@@ -101,8 +110,14 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
             }
             if (dist < camNear) camNear = dist;
             if (dist < nearest) nearest = dist;                         // 바닥 말고 장애물 중 가장 가까운 것
+            if (cols) cols[i] = Math.min(cols[i], Math.hypot(hit.point.x - o.x, hit.point.y - o.y));
           }
         }
+      }
+      if (cols) {
+        frontCols = cols.map((free, i) => ({ ang: Math.atan((i / (NX - 1) * 2 - 1) * tx), free,
+          blind: bandN[i] > 0 && blindN[i] > 0.6 * bandN[i] }));
+        if (frontCols.some((fc) => fc.blind && Math.abs(fc.ang) < Math.atan(halfW / 0.65))) gapA = 0;   // 정면 사각이면 막힘으로
       }
       counts.push(n);
       nears.push(camNear);
@@ -166,14 +181,17 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
   pipCam.up.set(0, 0, 1);
   if (course.ceilLayer) pipCam.layers.enable(course.ceilLayer);   // 차 카메라는 천장을 본다 (사람 화면에서만 숨김)
   const look = new THREE.Vector3();
-  function renderPip(w, h) {
-    if (!show.pip) { document.getElementById('pipLabel').textContent = ''; return; }
+  function aimPip() {
     front.rig.getWorldPosition(o);
     front.rig.getWorldQuaternion(q);
     pipCam.position.copy(o);
     look.set(1, 0, 0).applyQuaternion(q).add(o);
     pipCam.up.set(0, 0, 1).applyQuaternion(q);
     pipCam.lookAt(look);
+  }
+  function renderPip(w, h) {
+    if (!show.pip) { document.getElementById('pipLabel').textContent = ''; return; }
+    aimPip();
     const pw = Math.round(Math.min(360, w * 0.32)), ph = Math.round(pw / pipCam.aspect);
     const x = w - pw - 10, y = 30;
     const vis = ptsObj.visible, lv = lidar && lidar.pts.visible;
@@ -190,6 +208,48 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
     frusta.forEach((f) => { f.visible = f.userData.v; });
     document.getElementById('pipLabel').textContent = `앞 카메라 (${front.c.model}, 렌즈 높이 ${(front.c.z * 1000).toFixed(0)} mm)`;
     document.getElementById('pipLabel').style.bottom = `${y + ph + 4}px`;
+  }
+
+  // ---------------------------------------------------------------- 앞 카메라 사진 (GPT 운전)
+  // 렌더 타깃은 선형 색으로 남으므로 (r160) float 로 받아 sRGB 로 바꾼다. 센서 표시 (점 · 라이다 · 시야 상자) 는 뺀다.
+  let snapRT = null, snapBuf = null;
+  const SRGB = new Uint8ClampedArray(4096).map((_, i) => {
+    const c = i / 4095;
+    return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+  });
+  function snapFront(w = 1280) {
+    const h = Math.round(w / pipCam.aspect);
+    if (!snapRT || snapRT.width !== w) {
+      snapRT?.dispose();
+      snapRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType });
+      snapBuf = new Float32Array(w * h * 4);
+    }
+    aimPip();
+    const vis = ptsObj.visible, lv = lidar && lidar.pts.visible;
+    ptsObj.visible = false;
+    if (lidar) { lidar.pts.visible = false; lidar.lines.visible = false; }
+    frusta.forEach((f) => { f.userData.v = f.visible; f.visible = false; });
+    renderer.setRenderTarget(snapRT);
+    renderer.render(scene, pipCam);
+    renderer.setRenderTarget(null);
+    ptsObj.visible = vis;
+    if (lidar) { lidar.pts.visible = lv; lidar.lines.visible = lv; }
+    frusta.forEach((f) => { f.visible = f.userData.v; });
+    renderer.readRenderTargetPixels(snapRT, 0, 0, w, h, snapBuf);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    const img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4, dst = y * w * 4;               // GL 은 아래에서 위로
+      for (let x = 0; x < 4 * w; x += 4) {
+        for (let ch = 0; ch < 3; ch++) img.data[dst + x + ch] = SRGB[Math.min(4095, Math.max(0, Math.round(snapBuf[src + x + ch] * 4095)))];
+        img.data[dst + x + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const f = (w / 2) / Math.tan(front.c.hfov / 2 * D2R);              // 픽셀 초점거리 (가로 · 세로 같음)
+    return { canvas: cv, w, h, f, cam: front.c };
   }
 
   // ---------------------------------------------------------------- 전조등
@@ -242,7 +302,8 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
 
   return {
     toggle: (id, on) => { show[id] = on; },
-    update, renderPip, setLights, setStatus,
+    update, renderPip, setLights, setStatus, snapFront,
+    frontCols: () => frontCols,
     stats: () => ({ ...stats, lidarHits: lidar ? lidar.hits : null }),
     takeFeed: () => { if (!feed.fresh) return null; feed.fresh = false; return { rays: feed.rays, points: feed.points, ground: feed.ground }; },
   };

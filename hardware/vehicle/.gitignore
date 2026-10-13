@@ -45,8 +45,10 @@ models/hoverboard_mount/output/fea/**/*.msh
 
 # 차량 시뮬레이터 데이터 (web_export.py 가 다시 만든다)
 models/vehicle/sim/web/data/
-# 복도 맵 — 다른 프로젝트 (D:\Develop\ClaudeGame\hallway-3d) 에서 import_hallway.py 로 복사해 온 것
+# 복도 맵 — 다른 프로젝트 (F:\Develop\hallway-3d) 에서 import_hallway.py 로 복사해 온 것
 models/vehicle/sim/web/hallway/
+# GPT 운전 기록 (agent.py) — API 키는 agent.local.json (저장소 공통 *.local.* 로 제외)
+models/vehicle/sim/agent_logs/
 
 # 차량 버전 산출물 (600MB) — `record.py <버전> --rebuild` 로 다시 만든다.
 #   scene.npz = 메시 캐시 (버전당 2~200MB), <버전>.step = 조립 STEP (버전당 5~50MB)
