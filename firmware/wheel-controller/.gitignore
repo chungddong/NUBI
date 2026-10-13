@@ -4,3 +4,6 @@
 __pycache__/
 *.bin
 *.elf
+
+# Wi-Fi password (copy include/wifi_config.example.h)
+include/wifi_config.h

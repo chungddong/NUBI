@@ -17,10 +17,13 @@ tools/fea/python/
 # 생성 형상 — models/*.py 를 실행하면 다시 나온다
 exports/
 
-# 남의 참조 STEP — 출처가 따로 있고 우리가 만든 게 아니다.
-# 예외: 차량 (models/vehicle · hoverboard_mount) 을 짓는 데 꼭 필요한 호버보드 휠 모터 STEP (1MB) 하나만 담는다.
+# 남의 참조 STEP — 출처가 따로 있고 우리가 만든 게 아니다. 재배포 조건을 모르므로 공개 저장소에 넣지 않는다.
+# 차를 짓는 데 필요한 휠 모터 STEP 은 refmodel/README.md 를 보고 따로 둔다.
 refmodel/*
-!refmodel/Motor, BLDC, Hoverboard Wheel, 6.5in.stp
+!refmodel/README.md
+
+# 제조사 카탈로그에서 캡처한 표 — 일지에서만 참고, 공개 저장소에 넣지 않는다
+docs/images/*_ref_spg_*.png
 
 # FEA 중간 파일 — 케이스당 수십 MB. summary.txt / *.png / *.md 는 남긴다
 models/hoverboard_mount/output/fea/**/*.inp
@@ -48,7 +51,6 @@ models/vehicle/sim/web/hallway/
 # 차량 버전 산출물 (600MB) — `record.py <버전> --rebuild` 로 다시 만든다.
 #   scene.npz = 메시 캐시 (버전당 2~200MB), <버전>.step = 조립 STEP (버전당 5~50MB)
 #   scene.json (수치 · 검증 기록) · images · DXF · BOM 은 기록이라 담는다.
-# 예외: 마지막으로 검증까지 끝낸 버전의 STEP 하나는 공유용으로 담는다 (지금 v28_wiring, 20MB).
+# 조립 STEP 에는 휠 모터 참조 형상이 들어가므로 공유용 STEP 도 담지 않는다 (2026-10-13 공개 준비 때 뺐다).
 models/vehicle/*/output/scene.npz
 models/vehicle/*/output/*.step
-!models/vehicle/v28_wiring/output/v28_wiring.step

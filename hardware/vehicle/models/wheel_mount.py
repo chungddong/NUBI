@@ -52,8 +52,8 @@ def wheel():
 #   채널 깊이 **5.07** — 축의 D컷 평면(축중심 +5)을 그대로 덮는다. 즉 맞대는 면이
 #   축 중심 높이에 오고, 채널이 평면을 물어 **회전을 막는다.**
 #   볼트 4곳 Ø8.13 장공(16.25L), 중심 (±15.1, ±11.87) → M8
-CLAMP_STEP = Path("C:/Users/<user>/Downloads/hoverboard-motor-shaft-retention-bracket-1"
-                  ".snapshot.6/Hub Motor Shaft Bracket.STEP")
+CLAMP_STEP = (Path.home() / "Downloads/hoverboard-motor-shaft-retention-bracket-1"
+              ".snapshot.6/Hub Motor Shaft Bracket.STEP")
 CL_W, CL_T, CL_H = 42.72, 12.57, 39.22
 CL_BOLT = (15.1, 11.87)       # 볼트 중심 (축 수직 / 축 방향)
 CL_CH_D = 5.07                # 채널 깊이 = 평면 높이

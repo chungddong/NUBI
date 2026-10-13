@@ -33,6 +33,10 @@ py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
+The Wi-Fi hotspot password is not in the repository. Before the first build, copy
+`include\wifi_config.example.h` to `include\wifi_config.h` and set `WIFI_AP_PASS` (8+ characters);
+the build stops with an error until that file exists.
+
 | what | command |
 | --- | --- |
 | build | `.\pio.cmd run` |
@@ -205,7 +209,7 @@ The firmware raises its own access point at boot — no router involved:
 
 | | |
 | --- | --- |
-| SSID / password | `hoverwheel` / `********` — constants at the top of [src/main.cpp](src/main.cpp); change them before taking the wheel anywhere public |
+| SSID / password | set in `include/wifi_config.h`, which is git-ignored — copy [include/wifi_config.example.h](include/wifi_config.example.h) and pick a password. Default SSID `hoverwheel`. Anyone with the password can drive the wheel |
 | Page | `http://192.168.4.1/` — a captive portal, so Android/iOS pop it automatically right after joining |
 
 The page is a landscape button pad, game-controller style: steer buttons (◀ ▶)

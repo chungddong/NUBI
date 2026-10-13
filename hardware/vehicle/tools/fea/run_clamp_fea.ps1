@@ -16,7 +16,7 @@ $scriptPath = Join-Path $repoRoot "models\hoverboard_mount\run_clamp_fea.py"
 
 $pythonCandidates = @(
     (Join-Path $repoRoot ".venv\Scripts\python.exe"),
-    "C:\Users\<user>\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+    (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe")
 )
 
 $pythonExe = $null

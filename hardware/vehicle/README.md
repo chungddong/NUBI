@@ -29,7 +29,7 @@ Python 코드 ([build123d](https://build123d.readthedocs.io)) 로 설계한 기�
 | [`docs/interactive/`](docs/interactive/README.md) | 설명 페이지 (바퀴가 바깥으로 밀리는 이유 — 지렛대) |
 | [`docs/bom.md`](docs/bom.md) · `docs/floor_plate_cut*.md` | 재설계 전 BOM · 바닥판 재단 (지금 BOM 은 각 버전 폴더의 `bom.md`) |
 | [`tools/fea/`](tools/fea/) · [`tools/frame/`](tools/frame/) · `tools/bom/` · `tools/figures/` | FEA 파이프라인 (Gmsh → CalculiX), 프레임 해석, BOM 집계, 전복 모멘트 그림 |
-| `refmodel/` | 호버보드 6.5" 휠 모터 STEP (차를 지을 때 필요) |
+| [`refmodel/`](refmodel/README.md) | 외부 참조 STEP 을 두는 곳. 차를 지을 때 필요한 휠 모터 STEP 은 재배포 조건을 몰라 저장소에 없다 |
 
 ## 지금 상태 (2026-10)
 
@@ -43,8 +43,8 @@ Python 코드 ([build123d](https://build123d.readthedocs.io)) 로 설계한 기�
 |---|---|
 | `.venv/` | `SETUP.md` 대로 새로 만든다 |
 | `exports/` | 해당 `models/*.py` 실행 |
-| 차량 버전 `output/scene.npz` · `output/<버전>.step` | `.venv/Scripts/python.exe models/vehicle/record.py <버전> --rebuild` (v28_wiring STEP 만 공유용으로 담았다) |
+| 차량 버전 `output/scene.npz` · `output/<버전>.step` | `.venv/Scripts/python.exe models/vehicle/record.py <버전> --rebuild` (휠 모터 STEP 이 있어야 한다) |
 | 차량 시뮬 웹 데이터 · 복도 맵 | `models/vehicle/sim/web_export.py <버전>` · `import_hallway.py` (원본: `D:\Develop\ClaudeGame\hallway-3d`) |
 | FEA 중간 파일 · 외부 툴 (`tools/fea/calculix` · `gmsh_pyenv` · `python`) | 설치 안내는 `models/hoverboard_mount/FEA.md` |
-| 다른 참조 STEP (`refmodel/` 의 모터 말고) | 출처에서 받는다 (`wheeled_base.py` 는 Cramped Robot Wheel STEP 이 있어야 돈다) |
+| 참조 STEP (`refmodel/`, 휠 모터 포함) | 출처에서 받는다 ([`refmodel/README.md`](refmodel/README.md)). `wheeled_base.py` 는 Cramped Robot Wheel STEP 이 있어야 돈다 |
 | 로그, 개인 설정 | — |

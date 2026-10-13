@@ -98,7 +98,7 @@ build123d 0.11.1). 아래 우회는 실제로 깨졌을 때만 쓴다 — 멀쩡
 
 ```powershell
 $env:PYTHONPATH='D:\build123d\.venv\Lib\site-packages'
-& 'C:\Users\<user>\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' `
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" `
   models\hoverboard_mount\export_clamp_stl.py
 ```
 

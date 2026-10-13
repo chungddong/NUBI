@@ -105,6 +105,7 @@ py -3.12 -m venv .venv
 # 뷰어를 띄워 두고 (http://127.0.0.1:3939)
 .venv\Scripts\python.exe -m ocp_vscode
 # 다른 터미널에서 버전 하나를 다시 짓기 (형상 · 검증 · STEP · 이미지)
+# 휠 모터 STEP이 필요합니다 — hardwareehicleefmodel\README.md 참고
 .venv\Scripts\python.exe models\vehicle\record.py v28_wiring --rebuild
 ```
 
@@ -130,6 +131,9 @@ cd hardware\vehicle
 cd firmware\wheel-controller
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Wi-Fi 조종 페이지 비밀번호는 저장소에 없습니다. 예시를 복사해 직접 정합니다 (8자 이상)
+copy include\wifi_config.example.h include\wifi_config.h
 
 .\pio.cmd run                   # 빌드
 .\pio.cmd run -t upload         # 빌드 + 플래시
@@ -182,13 +186,14 @@ AI 에이전트(Claude Code, Codex)용 규칙은 [AGENTS.md](AGENTS.md)에 있�
 커밋 이력째 합쳐 만들었습니다. 통합 전 이력은 `git log 3cca93e^2`(바퀴 제어기)와 `git log 02f205d^2`(차체
 설계)로 볼 수 있습니다.
 
-외부에서 가져온 코드와 자료는 아래와 같고, 각각 원래의 라이선스를 따릅니다.
+외부에서 가져온 코드는 아래와 같고, 원래의 라이선스를 따릅니다.
 
 | 대상 | 출처 |
 | --- | --- |
 | `firmware/wheel-controller/include/hoverserial.h`, `util.h` | [RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32) (GPL-3.0)에서 그대로 복사 |
 | 호버보드 모터 보드 펌웨어 | 같은 프로젝트 (GPL-3.0). 이 저장소에는 바꾼 설정과 패치만 둡니다 |
-| `hardware/vehicle/refmodel/` 호버보드 6.5" 휠 모터 STEP | 외부 참조 모델 |
-| `hardware/vehicle/docs/images/2?_ref_spg_*.png` | SPG 모터 카탈로그의 토크 표 |
+
+재배포 조건을 확인하지 못한 외부 자료는 저장소에 넣지 않았습니다. 차체를 다시 지으려면 호버보드 6.5" 휠 모터
+STEP을 따로 받아야 합니다([hardware/vehicle/refmodel/](hardware/vehicle/refmodel/README.md)).
 
 이 저장소 자체의 라이선스는 아직 정하지 않았습니다.

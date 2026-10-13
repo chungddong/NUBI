@@ -19,8 +19,8 @@
      아래 자동 구역은 record.py 가 쓴다 (변화 표 · 이미지 · 수치 · 검증 · 부품 구성)
    - `output/<버전>.step` (assembly.py 실행 시), `output/scene.npz|json` (메시 캐시)
      — **git 에는 `.step` · `scene.npz` 를 넣지 않는다** (합치면 600 MB). `record.py <버전> --rebuild` 로 다시 만든다.
-     공유용으로 마지막 검증 버전 STEP 하나 (`v28_wiring.step`) 만 담는다. `scene.json` · 이미지 · DXF · BOM 은 담는다.
-     차를 지으려면 `refmodel/Motor, BLDC, Hoverboard Wheel, 6.5in.stp` (담겨 있음) 가 필요하다.
+     조립 STEP 에는 휠 모터 참조 형상이 들어가므로 공유용 STEP 도 담지 않는다. `scene.json` · 이미지 · DXF · BOM 은 담는다.
+     차를 지으려면 `refmodel/Motor, BLDC, Hoverboard Wheel, 6.5in.stp` 가 필요하다 — 외부 모델이라 저장소에 없다 ([`refmodel/README.md`](../../refmodel/README.md)).
 5. 부품 label 은 버전 사이에 **같은 부품이면 같은 이름**을 쓴다. 변화는 `그룹key/label`
    로 짝지어 자동으로 찾는다 (삭제 · 추가 · 이동 · 형상 변경).
 

@@ -125,10 +125,17 @@ static bool bHostLost = false;
 static unsigned long iLastHostAt = 0;
 
 // --- WiFi hotspot ------------------------------------------------------------
-// WPA2 needs 8+ characters. Anyone holding this password can drive the wheel,
-// so change it before taking the thing outside.
-static const char *AP_SSID = "hoverwheel";
-static const char *AP_PASS = "********";
+// SSID and password live in include/wifi_config.h, which is git-ignored so the
+// password never reaches the repository: copy include/wifi_config.example.h.
+// Anyone holding the password can drive the wheel.
+#if __has_include("wifi_config.h")
+#include "wifi_config.h"
+#else
+#error "include/wifi_config.h is missing: copy include/wifi_config.example.h and set WIFI_AP_PASS"
+#endif
+static_assert(sizeof(WIFI_AP_PASS) - 1 >= 8, "WPA2 needs a password of 8+ characters");
+static const char *AP_SSID = WIFI_AP_SSID;
+static const char *AP_PASS = WIFI_AP_PASS;
 static const uint32_t WEB_TIMEOUT_MS = 1000;  // web-client silence that cuts it
 
 static WebServer oWeb(80);
