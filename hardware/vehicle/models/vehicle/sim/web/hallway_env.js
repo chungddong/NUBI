@@ -1,4 +1,4 @@
-// 복도 환경 — 영상으로 복원한 실제 건물 3 층 복도 · 라운지 (D:\Develop\ClaudeGame\hallway-3d, import_hallway.py 로 복사).
+// 복도 환경 — 영상으로 복원한 실제 건물 3 층 복도 · 라운지 (F:\Develop\hallway-3d, import_hallway.py 로 복사).
 // 원본 형상 코드 (buildArchitecture · buildObjects) 를 그대로 쓰고, y 가 위인 원본을 x 축으로 +90° 돌려 z 가 위로 맞춘다:
 //   우리 (x, y, z) = 원본 (x, −z, y)  — 원본 z 는 라운지 쪽으로 걸을 때 오른쪽, 우리 y 는 왼쪽.
 // course.js 와 같은 모양의 객체를 돌려준다 (solids · height · hits · spots · update · movers · bounds).
@@ -17,14 +17,19 @@ export async function makeHallway(scene) {
   const group = new THREE.Group();
   group.rotation.x = Math.PI / 2;                       // 원본 y (위) → 우리 z
   group.add(arch.root, objRoot);
-  arch.ceilings.visible = false;                        // 위에서 보려고 천장은 숨긴다 (광선 투사에서도 뺀다)
   group.traverse((m) => { if (m.isMesh) { m.castShadow = false; m.receiveShadow = true; } });
+  // 천장 층 — 천장 판과 천장에 단 것 (조명 · 감지기 · 비상구 표지 …) 을 레이어 CEIL 에만 둔다.
+  // 사람이 보는 화면 (레이어 0) 은 위에서 내려다보려고 빼고, 차 앞 카메라 화면 (sensors.js) 과 광선 투사에는 넣는다.
+  const CEIL = 1;
+  const toCeil = (g) => g.traverse((o) => o.layers.set(CEIL));
+  toCeil(arch.ceilings);
+  for (const g of objRoot.children) if (g.userData.record?.data.mount === 'ceiling') toCeil(g);
   scene.add(group);
   group.updateMatrixWorld(true);
 
-  // 광선 투사 대상 — 바닥 · 벽 · 오브젝트 (천장 빼고). 벽은 안쪽 면만 있는 판이라 안에서 쏘면 맞는다.
+  // 광선 투사 대상 — 바닥 · 벽 · 천장 · 오브젝트. 벽은 안쪽 면만 있는 판이라 안에서 쏘면 맞는다.
   const solids = [];
-  for (const g of [arch.floors, arch.walls, objRoot]) g.traverse((m) => { if (m.isMesh && m.visible !== false) solids.push(m); });
+  for (const g of [arch.floors, arch.walls, arch.ceilings, objRoot]) g.traverse((m) => { if (m.isMesh && m.visible !== false) solids.push(m); });
 
   // 충돌 — 원본 바닥 평면 (x, z) → 우리 (x, −z)
   const segs = colliders.segments.map(([ax, az, bx, bz]) => [ax, -az, bx, -bz]);
@@ -123,7 +128,7 @@ export async function makeHallway(scene) {
   };
   const names = { start: '복도 입구', mid: '복도 가운데', lounge: '라운지 앞', back: '되돌아오기' };
   return {
-    kind: 'hallway', title: data.title, subtitle: data.subtitle, group, solids, height: () => 0, hits, spots, names,
+    kind: 'hallway', title: data.title, subtitle: data.subtitle, group, solids, ceilLayer: CEIL, height: () => 0, hits, spots, names,
     ramps: [], steps: [], sides: [], movers, update, bounds: [-3.5, -13.0, 48.0, 6.0],
     setMovers: (on) => movers.forEach((w) => { w.on = on; w.m.visible = on; }),
   };

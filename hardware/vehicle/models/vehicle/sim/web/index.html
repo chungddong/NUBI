@@ -41,6 +41,7 @@
   button.stop { background: #c62828; color: #fff; border-color: #c62828; font-weight: 700; }
   button.stop.on { background: #fff; color: #c62828; }
   label.tg { display: flex; align-items: center; gap: 6px; margin: 3px 0; cursor: pointer; }
+  label.tg[hidden] { display: none; }
   table.kv { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   table.kv td { padding: 2px 0; }
   table.kv td:last-child { text-align: right; font-weight: 600; }
@@ -164,6 +165,7 @@
       <h2>환경 · 출발점</h2>
       <div class="ctl"><select id="env" style="flex:1"><option value="course">시험 코스</option><option value="hallway">복도 (실제 건물 3 층 · 영상 복원)</option></select></div>
       <div class="note" id="envNote"></div>
+      <label class="tg" id="ceilRow" hidden><input type="checkbox" id="ceil"> 천장 보기 (내 화면만 — 차 카메라 · 깊이에는 늘 있음)</label>
       <div class="btns" id="spots" style="margin-top:6px"></div>
     </section>
     <section>

@@ -187,9 +187,13 @@ $('wmax').oninput = (e) => { st.wmax = +e.target.value; $('wmaxv').textContent =
 $('env').value = ENV;
 $('env').onchange = (e) => { location.search = e.target.value === 'hallway' ? '?env=hallway' : ''; };
 $('spots').innerHTML = Object.keys(course.spots).map((k) => `<button data-go="${k}">${course.names[k] ?? k}</button>`).join('');
-$('envNote').textContent = ENV === 'hallway' ? `${course.title} — ${course.subtitle}. 벽 · 난간 · 고정 가구와 충돌, 사람 2 명이 복도를 오간다. 천장은 숨김.`
+$('envNote').textContent = ENV === 'hallway' ? `${course.title} — ${course.subtitle}. 벽 · 난간 · 고정 가구와 충돌, 사람 2 명이 복도를 오간다. 천장은 내 화면에서만 숨김 (차 카메라 · 깊이에는 있음).`
   : '상자 · 사람 크기 기둥 · 좁은 통로 (폭 0.8 m) · 턱 20 / 40 mm · 경사로 10° / 15° · 옆 경사 20°. 턱은 바퀴 반지름의 40 % 까지만 넘는다고 본다 (어림).';
 document.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => place(course.spots[b.dataset.go]));
+if (course.ceilLayer) {
+  $('ceilRow').hidden = false;
+  $('ceil').onchange = (e) => (e.target.checked ? camera.layers.enable(course.ceilLayer) : camera.layers.disable(course.ceilLayer));
+}
 if (!course.ramps.length) { $('estopTest').disabled = true; $('estopTest').title = '시험 코스 (경사로) 에서만'; }
 let camMode = 'orbit';
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => {

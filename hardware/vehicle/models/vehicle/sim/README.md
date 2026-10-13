@@ -16,15 +16,19 @@
 ### 환경 — 시험 코스 / 복도
 
 패널 '환경 · 출발점' 에서 고른다 (`?env=hallway`). **복도**는 영상으로 복원한 실제 건물 3 층 복도 · 라운지
-(`D:\Develop\ClaudeGame\hallway-3d`, 벽 26 · 오브젝트 153, 사진 텍스처). 원본은 읽기만 하고 아래로 복사해 쓴다:
+(`F:\Develop\hallway-3d`, scene.json 기준 벽 85 · 오브젝트 223, 문 23 개에 호수 이름). 2026-09 부터 원본은 사진 대신
+텍스처를 코드로 그린다. 원본은 읽기만 하고 아래로 복사해 쓴다:
 
 ```bash
 .venv/Scripts/python.exe models/vehicle/sim/import_hallway.py
 ```
 
-→ `web/hallway/` (형상 코드 world/ · scene.json · 텍스처, gitignore). 원본 `buildArchitecture` · `buildObjects` 를 그대로 부르고
+→ `web/hallway/` (형상 코드 world/ · scene.json, 사진 텍스처는 원본에 있을 때만, gitignore). 원본 `buildArchitecture` · `buildObjects` 를 그대로 부르고
 x 축 +90° 로 돌려 z 를 위로 (우리 (x, y, z) = 원본 (x, −z, y)). 충돌은 원본 충돌선 (벽 · 난간) + 고정 가구 상자 + 사람 2.
 복도를 고치면 import_hallway 를 다시 돌린다.
+천장 판과 천장에 단 것 (조명 · 감지기 · 비상구 표지) 은 three.js 레이어 1 에 둔다 — 내 화면에서는 숨기고 (패널 '천장 보기'),
+앞 카메라 화면과 광선 투사 (깊이 · 라이다) 에는 들어간다. 깊이 점 중 차 높이 + 15 cm (0.68 m) 보다 높은 것은 밑으로
+지나갈 수 있으므로 장애물도 바닥도 아니다 (점으로는 그린다).
 버전 인자를 빼면 메시 캐시가 있는 마지막 버전.
 
 ## 파일

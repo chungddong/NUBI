@@ -44,7 +44,7 @@ Python 코드 ([build123d](https://build123d.readthedocs.io)) 로 설계한 기�
 | `.venv/` | `SETUP.md` 대로 새로 만든다 |
 | `exports/` | 해당 `models/*.py` 실행 |
 | 차량 버전 `output/scene.npz` · `output/<버전>.step` | `.venv/Scripts/python.exe models/vehicle/record.py <버전> --rebuild` (휠 모터 STEP 이 있어야 한다) |
-| 차량 시뮬 웹 데이터 · 복도 맵 | `models/vehicle/sim/web_export.py <버전>` · `import_hallway.py` (원본: `D:\Develop\ClaudeGame\hallway-3d`) |
+| 차량 시뮬 웹 데이터 · 복도 맵 | `models/vehicle/sim/web_export.py <버전>` · `import_hallway.py` (원본: `F:\Develop\hallway-3d`) |
 | FEA 중간 파일 · 외부 툴 (`tools/fea/calculix` · `gmsh_pyenv` · `python`) | 설치 안내는 `models/hoverboard_mount/FEA.md` |
 | 참조 STEP (`refmodel/`, 휠 모터 포함) | 출처에서 받는다 ([`refmodel/README.md`](refmodel/README.md)). `wheeled_base.py` 는 Cramped Robot Wheel STEP 이 있어야 돈다 |
 | 로그, 개인 설정 | — |

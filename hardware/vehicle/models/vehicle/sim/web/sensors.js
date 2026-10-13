@@ -53,6 +53,7 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
   let stats = { front: 0, rear: 0, near: Infinity, nearFront: Infinity, nearRear: Infinity, gapAhead: Infinity, gapBehind: Infinity };
   // 차가 지나갈 띠 (차 반폭 + 5 cm) 안의 장애물만 — 범퍼에서 잰 거리 (자율주행이 멈출지 정한다)
   const bbx = data.bbox, halfW = Math.max(-bbx.min[1], bbx.max[1]) + 0.05;
+  const overZ = bbx.max[2] + 0.15;          // 차 높이 + 15 cm 위 (천장 · 천장에 단 것 · 벽 윗부분) 는 밑으로 지나간다
   const loc = new THREE.Vector3();
   const feed = { rays: [], points: [], ground: [], fresh: false };   // 자율주행 지도로 넘길 것 (nav.js)
   // 장애물 면인가 — 맞은 면의 법선이 거의 수평 (벽 · 상자 옆 · 턱 옆) 이고 바닥에서 3 cm 위
@@ -88,6 +89,7 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
           col.setHSL(Math.min(dist / c.far, 1) * 0.66, 0.85, inIdeal ? 0.5 : 0.75);
           C[3 * k] = col.r; C[3 * k + 1] = col.g; C[3 * k + 2] = col.b;
           k++; n++;
+          if (hit.point.z > overZ) continue;                          // 점은 그리되 장애물도 바닥도 아님
           if (!isObstacle(hit)) { if (hit.point.z <= 0.03 || (nW.z > 0.9)) feed.ground.push([hit.point.x, hit.point.y]); }
           else {
             feed.points.push([hit.point.x, hit.point.y]);
@@ -162,6 +164,7 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
   const front = camRigs.find((r) => r.c.yaw === 0);
   const pipCam = new THREE.PerspectiveCamera(front.c.vfov, Math.tan(front.c.hfov / 2 * D2R) / Math.tan(front.c.vfov / 2 * D2R), 0.05, 40);
   pipCam.up.set(0, 0, 1);
+  if (course.ceilLayer) pipCam.layers.enable(course.ceilLayer);   // 차 카메라는 천장을 본다 (사람 화면에서만 숨김)
   const look = new THREE.Vector3();
   function renderPip(w, h) {
     if (!show.pip) { document.getElementById('pipLabel').textContent = ''; return; }
