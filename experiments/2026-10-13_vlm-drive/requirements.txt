@@ -1,0 +1,9 @@
+# PC (가짜 장치 시험) — 이 폴더의 .venv
+numpy==2.4.6
+opencv-python-headless
+pillow==12.2.0
+pyserial==3.5
+# Claude 를 쓸 때만 (GPT 는 표준 라이브러리로 부른다)
+anthropic==1.13.0
+# Jetson 에서는 위 대신: python3-opencv (JetPack), pip install openni pyserial pillow numpy [anthropic]
+# openni 는 libOpenNI2.so (apt: libopenni2-0) 를 부르는 파이썬 바인딩

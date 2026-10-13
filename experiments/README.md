@@ -4,8 +4,10 @@
 
 ```
 experiments/
-├── 2026-09-17_depth-guard/     RDK + Xtion 전방 장애물 가드 (가져올 예정)
-└── 2026-09-18_flysim-drive/    Jetson 초파리 전뇌 시뮬레이션 폐루프 주행 (가져올 예정)
+├── 2026-09-17_depth-guard/           RDK + Xtion 전방 장애물 가드 (가져올 예정)
+├── 2026-09-18_flysim-drive/          Jetson 초파리 전뇌 시뮬레이션 폐루프 주행 (가져올 예정)
+├── 2026-10-13_vlm-drive/             Jetson + ESP32 + Xtion 으로 GPT · Claude 실차 운전 (PC 가짜 장치 시험까지)
+└── 2026-10-13_sfm-relocalization/    복도 SfM 지도로 카메라 위치 다시 찾기 정확도 (미완)
 ```
 
 ## 실험 폴더마다 남길 것
