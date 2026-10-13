@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>차량 시뮬레이터</title>
+<style>
+  :root {
+    --bg: #1d2024; --panel: #f6f7f8; --ink: #1f2328; --sub: #5d6670; --line: #dfe3e7;
+    --accent: #2f7de1; --warn: #d9480f; --ok: #2b8a3e; --chip: #eef1f4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; font-size: 13px; }
+  #app { display: flex; height: 100%; }
+  #view { position: relative; flex: 1; min-width: 0; }
+  #view canvas { display: block; }
+  #panel { width: 340px; flex: none; overflow-y: auto; overflow-x: hidden; background: var(--panel); border-left: 1px solid #000; }
+  #loading { position: absolute; inset: 0; display: grid; place-items: center; color: #cfd5da; font-size: 15px; }
+  #pipLabel { position: absolute; right: 12px; bottom: 12px; color: #fff; font-size: 11px; pointer-events: none;
+    text-shadow: 0 1px 2px #000; }
+  #hud { position: absolute; left: 12px; top: 10px; color: #e9edf1; font-size: 12px; line-height: 1.5;
+    text-shadow: 0 1px 2px #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+  #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 6px 12px; border-radius: 6px;
+    font-weight: 700; display: none; }
+  #toast.bad { display: block; background: #fde8e0; color: var(--warn); }
+  #toast.info { display: block; background: #e7f0fd; color: #1c5bb0; }
+  h1 { font-size: 15px; margin: 0; }
+  .head { padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
+  .head small { color: var(--sub); display: block; margin-top: 3px; line-height: 1.4; }
+  section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  section > h2 { font-size: 12px; margin: 0 0 8px; color: var(--sub); font-weight: 600; }
+  .ctl { display: flex; align-items: center; gap: 8px; margin: 4px 0 3px; }
+  .ctl input[type=range] { flex: 1; accent-color: var(--accent); }
+  .ctl > span:first-child { white-space: nowrap; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 5px 10px;
+    border-radius: 6px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.stop { background: #c62828; color: #fff; border-color: #c62828; font-weight: 700; }
+  button.stop.on { background: #fff; color: #c62828; }
+  label.tg { display: flex; align-items: center; gap: 6px; margin: 3px 0; cursor: pointer; }
+  table.kv { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.kv td { padding: 2px 0; }
+  table.kv td:last-child { text-align: right; font-weight: 600; }
+  .bar { height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+  .bar > i { display: block; height: 100%; background: var(--ok); width: 0; }
+  .bar.bad > i { background: var(--warn); }
+  .note { color: var(--sub); font-size: 11.5px; line-height: 1.45; }
+  .lamp { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .lamp i { width: 12px; height: 12px; border-radius: 50%; background: #3a3f45; display: inline-block; }
+  table.small td { font-size: 11px; font-weight: 400 !important; text-align: left !important; padding: 2px 3px; border-bottom: 1px solid var(--line); }
+  select { font: inherit; padding: 2px 4px; }
+  kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font: 11px Consolas, monospace; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="view">
+    <div id="loading">차량 메시를 불러오는 중…</div>
+    <div id="hud"></div>
+    <div id="toast"></div>
+    <div id="pipLabel"></div>
+  </div>
+  <div id="panel">
+    <div class="head">
+      <h1>차량 시뮬레이터</h1>
+      <small id="ver">—</small>
+    </div>
+    <section>
+      <h2>운전</h2>
+      <div class="note"><kbd>W</kbd><kbd>S</kbd> 앞뒤 · <kbd>A</kbd><kbd>D</kbd> 회전 (방향키도 됨) · <kbd>Space</kbd> 비상정지 · <kbd>R</kbd> 처음 자리</div>
+      <div class="ctl"><span>최고 속도</span><input id="vmax" type="range" min="0.2" max="2.0" step="0.1" value="1.5"><span id="vmaxv">1.5 m/s</span></div>
+      <div class="ctl"><span>최고 회전</span><input id="wmax" type="range" min="0.3" max="3.0" step="0.1" value="1.5"><span id="wmaxv">1.5 rad/s</span></div>
+      <div class="btns" style="margin-top:6px">
+        <button id="estop" class="stop">비상정지</button>
+        <button id="reset">처음 자리</button>
+      </div>
+      <div class="ctl" style="margin-top:8px"><span>상태 표시등</span><span class="lamp"><i id="lr"></i><i id="la"></i><i id="lg"></i></span><span id="mode" class="note"></span></div>
+    </section>
+    <section>
+      <h2>시점</h2>
+      <div class="btns">
+        <button data-cam="orbit" class="on">자유</button>
+        <button data-cam="chase">뒤따라가기</button>
+        <button data-cam="top">위에서</button>
+      </div>
+    </section>
+    <section>
+      <h2>센서 · 조명</h2>
+      <label class="tg"><input type="checkbox" id="frustum" checked> 뎁스 카메라 시야 (앞 · 뒤, 90° × 65°)</label>
+      <label class="tg"><input type="checkbox" id="points" checked> 깊이 점 (광선 투사)</label>
+      <label class="tg"><input type="checkbox" id="pip" checked> 앞 카메라 화면</label>
+      <label class="tg"><input type="checkbox" id="lidar" checked> 라이다 스캔 <span id="lidarNote" class="note"></span></label>
+      <label class="tg"><input type="checkbox" id="lights"> 전조등 (MR16 5 W × 2)</label>
+      <label class="tg"><input type="checkbox" id="night"> 밤</label>
+      <div class="note" id="sensNote"></div>
+    </section>
+    <section>
+      <h2>① 센서 사각지대</h2>
+      <label class="tg"><input type="checkbox" id="cover"> 차 둘레 6 × 6 m 칠하기</label>
+      <div class="ctl"><span>장애물 높이</span>
+        <select id="covH"><option value="0.1">10 cm (턱 · 낮은 상자)</option><option value="0.3">30 cm (무릎 · 강아지)</option>
+          <option value="0.6">60 cm (어린이 · 의자)</option><option value="1.2">1.2 m (사람)</option></select></div>
+      <div class="note">초록 = 카메라 (진하면 이상 범위 0.3~3 m) · 파랑 = 라이다 · 청록 = 둘 다 · <b style="color:#e03131">빨강 = 아무도 못 봄</b></div>
+      <div class="note" id="covStats" style="margin-top:4px"></div>
+    </section>
+    <section>
+      <h2>② 전복 · 무게중심</h2>
+      <label class="tg"><input type="checkbox" id="stabShow"> 무게중심 · 지지면 보이기</label>
+      <div class="ctl"><span>추가 모듈 무게</span><input id="pm" type="range" min="0" max="25" step="1" value="0"><span id="pmv">0 kg</span></div>
+      <div class="ctl"><span>무게중심 (레일 위)</span><input id="ph" type="range" min="0.05" max="0.9" step="0.05" value="0.3"><span id="phv">300 mm</span></div>
+      <div class="ctl"><span>앞뒤 위치</span><input id="px" type="range" min="-0.3" max="0.3" step="0.05" value="0"><span id="pxv">0 mm</span></div>
+      <div class="note" id="stabStats"></div>
+      <div class="note" id="stabLive" style="margin-top:4px"></div>
+    </section>
+    <section>
+      <h2>③ 비상정지 방식</h2>
+      <div class="ctl"><select id="estopMode" style="flex:1">
+        <option value="cut">A. 즉시 차단 (지금)</option><option value="brake_cut">B. 정지 후 차단 (0.5 s)</option>
+        <option value="hold">C. 정지 유지 (전원 유지)</option><option value="short">D. 차단 + 상선 단락 제동</option></select></div>
+      <div class="note" id="estopDesc"></div>
+      <div class="btns" style="margin-top:6px"><button id="estopTest">10° 경사에서 네 방식 비교</button></div>
+      <div id="estopTable" class="note" style="margin-top:6px"></div>
+    </section>
+    <section>
+      <h2>④ 자율주행</h2>
+      <div class="btns">
+        <button id="navPick">목표 찍기</button><button id="navGo">다시 출발</button><button id="navStop">멈춤</button><button id="navClear">지도 지우기</button>
+      </div>
+      <label class="tg"><input type="checkbox" id="navMap" > 점유 지도 보기 (검정 = 장애물, 주황 = 차 반폭만큼 부풀린 곳)</label>
+      <label class="tg"><input type="checkbox" id="movers" checked> 움직이는 사람 2</label>
+      <div class="note" id="navStatus"></div>
+      <div class="note">라이다 광선이 지나간 칸은 비우고 맞은 칸은 채운다. 깊이 점은 벽 · 상자 옆 같은 세운 면만. A* (0.1 m 칸, 차 반폭 + 5 cm 부풀림) → 순수 추종 0.8 m/s. 0.5 s 앞을 미리 봐서 닿으면 제자리 회전 · 후진 · 대기, 지나갈 띠 안 장애물이 범퍼 앞 8 cm 면 멈춤, 2 s 끼면 뒤로.</div>
+    </section>
+    <section>
+      <h2>전원 (추정 — DECISIONS D-04 식)</h2>
+      <table class="kv">
+        <tr><td>속도 · 회전</td><td id="kv_v">—</td></tr>
+        <tr><td>기울기 (앞뒤 · 좌우)</td><td id="kv_tilt">—</td></tr>
+        <tr><td>바퀴 상전류 (최대 15 A)</td><td id="kv_ip">—</td></tr>
+      </table>
+      <div class="bar" id="bar_ip"><i></i></div>
+      <table class="kv">
+        <tr><td>배터리 전류 (BMS 최대 30 A)</td><td id="kv_ib">—</td></tr>
+      </table>
+      <div class="bar" id="bar_ib"><i></i></div>
+      <table class="kv">
+        <tr><td>소비 전력</td><td id="kv_p">—</td></tr>
+        <tr><td>지금 페이스로 남은 시간</td><td id="kv_t">—</td></tr>
+        <tr><td>이번 주행 최대 배터리 전류</td><td id="kv_imax">—</td></tr>
+      </table>
+      <div class="note" id="pwrNote"></div>
+    </section>
+    <section>
+      <h2>환경 · 출발점</h2>
+      <div class="ctl"><select id="env" style="flex:1"><option value="course">시험 코스</option><option value="hallway">복도 (실제 건물 3 층 · 영상 복원)</option></select></div>
+      <div class="note" id="envNote"></div>
+      <div class="btns" id="spots" style="margin-top:6px"></div>
+    </section>
+    <section>
+      <h2>차량</h2>
+      <table class="kv" id="veh"></table>
+    </section>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

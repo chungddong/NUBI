@@ -1,0 +1,29 @@
+As-failed legacy U-top bracket (no gussets, opening inboard) open-source FEA
+Model key: legacy_u_nogusset
+STEP: D:\build123d\models\hoverboard_mount\output\step\legacy_u_bracket_no_gussets_open_inboard.step
+Load: 800.0 N upward on axle seat
+Load-line eccentricity from seat centre: 55.000 mm
+Applied bending moment about X: 44.000 N m
+Mesh target: 3.000 mm, quadratic C3D10 tetrahedra
+Elements: 55892
+Fixed nodes (four upper/lower U-arm rail-fastener hole walls): 1876
+Loaded axle-seat nodes: 643
+Load terms [set, nodes, total N, per-node N]:
+  AXLE_SEAT_OUTBOARD: 331, 2503.531116, 7.563538115
+  AXLE_SEAT_INBOARD: 312, -1703.531116, -5.460035628
+Material: PETG isotropic estimate, E=2100 MPa, nu=0.380
+Reference yield strength: 45.0 MPa
+VTU point fields: E, ERROR, E_Mises, E_Principal, RF, S, S_Mises, S_Principal, U
+Max von Mises from VTU: 44.37304314050141 MPa
+Max displacement from VTU: 2.978899980188698 mm
+Support reactions [Fx,Fy,Fz] N:
+  lower_arm_left: [264.313103, -192.956889, 140.646534]
+  upper_arm_left: [-73.867422, 192.757649, -550.211126]
+  lower_arm_right: [-259.333594, -195.068202, 156.177946]
+  upper_arm_right: [68.887857, 195.267274, -546.613269]
+  total: [-0.000056, -0.000168, -799.999915]
+Boundary model: rigid support on four upper/lower U-arm rail-fastener hole walls.
+Interpretation: comparative linear-static model; no bolt preload/contact/fatigue yet.
+FRD: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_nogusset_800N_h3mm_petg_e55mm_up\legacy_u_nogusset_bracket.frd
+VTU: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_nogusset_800N_h3mm_petg_e55mm_up\legacy_u_nogusset_bracket.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\legacy_u_nogusset_800N_h3mm_petg_e55mm_up\stress_deformed_800N.png

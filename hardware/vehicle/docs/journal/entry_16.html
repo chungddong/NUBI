@@ -1,0 +1,125 @@
+<p>이날은 설계를 더 고치는 날이 아니었다. 지금까지 만든 것 전부 — 3030 프레임, Design-D 휠마운트 4세트, 액슬 타이, 외장셸, 적재함, 센서·전자 — 를 한 화면에 올리고, 그 형상에서 부품 수량·부피·질량을 그대로 읽어 예상 견적(BOM)을 내는 것이 목표였다. 닷새 뒤 09-15 저녁에는 이 세션 전체를 Trilium 에 일지로 남기자는 요구가 나와 Claude 가 접근 경로를 조사했다.</p>
+
+<blockquote>우리 차량 했던 것 전체 버전 뷰어에 보여주고 그거 기반으로 부품 예상 견적 내보자 BOM 해서 말이야</blockquote>
+
+<h3>10:43 — "전체 버전" 스크립트 확인</h3>
+<p>차량 통합 스크립트가 네 개(<code>vehicle_integration.py</code>, <code>vehicle_shell_integration.py</code>, <code>vehicle_cargo_integration.py</code>, <code>vehicle_flat_abs_integration.py</code>)였고, 셸·적재함까지 다 붙는 것은 <code>VEHICLE_PAYLOAD=cargo</code> 를 걸고 <code>vehicle_shell_integration.main()</code> 을 부르는 11줄짜리 cargo 판이었다. 본체 <code>models/swerve_base.py</code> 는 2,961줄(09-15 현재도 같다)로, 프레임·브라켓·판재·셸·적재함을 <code>GROUPS</code> 로 묶어 두고 있었다. 가격 관련 상수는 <code>models/tslot.py</code> 에 이미 있었다 — <code>UNIT_PRICE = 950</code> 원/100 mm(2026-08 실주문 확인), <code>CUT_UNIT = 100</code> 으로 100 mm 단위 올림 과금.</p>
+<p>막힌 것 → 원인 → 해결:</p>
+<ul>
+<li>저장소 전체 <code>grep -rn "BOM\|bom"</code> 이 120초 안에 끝나지 않아 백그라운드로 넘어갔다 → 원인은 기록에 없다(<code>.venv</code>·output 까지 뒤진 탓으로 보이나 확실하지 않다) → 작업을 중단(<code>TaskStop</code>)하고 필요한 파일만 직접 열었다.</li>
+<li>탐색 스크립트를 <code>$TMPDIR/probe.py</code> 에 쓰려다 <code>/probe.py: Permission denied</code> → Git Bash 에서 <code>TMPDIR</code> 이 비어 루트에 쓰려 한 것 → 스크래치패드 절대경로를 박아 해결.</li>
+<li><code>cd models &amp;&amp; grep …</code> 가 <code>cd: models: No such file or directory</code> → 서브에이전트 셸은 호출마다 cwd 가 초기화된다(바로 앞 <code>cd models &amp;&amp; sed …</code> 는 우연히 통했다) → 다음 명령부터 <code>cd /d/build123d &amp;&amp;</code> 또는 저장소 루트 기준 경로를 썼다.</li>
+</ul>
+
+<h3>10:50 — 통합 스크립트 갱신 (볼트 길이·액슬 타이)</h3>
+<p><code>vehicle_shell_integration.py</code> 는 볼트 길이를 <code>side_button_head_bolts_reference(20.0)</code> / <code>bottom_…(20.0)</code> 으로 박아 두고 있었고(실측은 M6x15), 액슬 타이가 아예 없었다. Claude 가 고친 내용(09-15 현재 <code>git diff</code> 로 확인):</p>
+<ul>
+<li><code>import parameters as P</code> 를 추가하고, 볼트 참조를 인자 없이 불러 <code>P.LOW_BOLT_LEN</code>(15 mm)을 따르게 했다. 라벨도 <code>M6x20_…</code> / <code>M6x20_프로파일체결볼트_24개</code> 고정 문자열에서 <code>f"M{P.TNUT_BOLT:.0f}x{P.LOW_BOLT_LEN:.0f}_…"</code> 와 실제 개수로 바꿨다.</li>
+<li><code>axle_ties()</code> 를 새로 넣어 앞뒤 축(<code>±V.AXLE_X</code>)마다 <code>LC.tie_rods + LC.tie_profile</code>(TIE_KIND 에 따라 한쪽은 빈 목록) 과 <code>LC.tie_brackets</code> 를 배치했다. 그룹 이름은 <code>TIE_KIND</code> 에 따라 <code>액슬타이_3030x{TIE_PROF_LEN}_…</code> 또는 봉 규격(<code>액슬타이_M8x400봉_…</code>)으로 붙는다.</li>
+<li>그룹 라벨 <code>DesignD_원래_하부클램프_4개</code> → <code>DesignD_하부클램프_4개</code>. 색 목록도 고정 4색에서 <code>g.color</code> 로 바꿨다.</li>
+</ul>
+<p>실행 결과(<code>MOUNT=low</code>, cargo): 전장 873 × 전폭 612 × 전고 606 mm, 축간 420 / 윤거 520 / 바퀴 Ø158.7, 레일 중심 z=108.92 / 차체 바닥 z=93.92 / 지상고 55.35, 바퀴가 레일 윗면보다 34.8 mm 솟아 휠아치가 필요하다는 기존 경고가 그대로 찍혔다. 스키드 T/L 1.24, 베이 700×390×140(바닥 z=127), 데크 810×510 @ z=303, 셸 고정 M6 12개. 뷰어(3939)에는 38그룹이 올라갔다(<code>groups=38 wheel_y=±263.70 rail_z=108.92</code>).</p>
+<p>이 구간의 렌더는 <code>docs/images</code> 에 없다 — 전폭 612 / 전고 606 전체 버전은 브라우저로 뷰어 스크린샷만 봤고 파일로 남기지 않았다.</p>
+
+<h3>10:52 — 형상에서 부피·수량 추출</h3>
+<p>BOM 을 손으로 적지 않고 <code>swerve_base</code> 를 <code>NOSHOW=1 NOEXPORT=1</code> 로 임포트해 <code>GROUPS</code> 를 순회하며 부품 수·부피·bbox 를 뽑았다. 주요 값:</p>
+<table>
+<thead><tr><th>그룹</th><th>개수</th><th>부피 (cm³)</th><th>bbox (mm)</th></tr></thead>
+<tbody>
+<tr><td>프레임</td><td>18</td><td>2,695.6</td><td>760×450×203</td></tr>
+<tr><td>조인트브라켓</td><td>28</td><td>149.1</td><td>700×445×198</td></tr>
+<tr><td>바퀴</td><td>4</td><td>4,355.1</td><td>579×583×159</td></tr>
+<tr><td>휠마운트</td><td>4</td><td>363.7</td><td>504×453×39</td></tr>
+<tr><td>휠클램프</td><td>4</td><td>60.4</td><td>463×452×13</td></tr>
+<tr><td>판재 (베이바닥판 / 데크)</td><td>2</td><td>796.1 / 1,223.5</td><td>—</td></tr>
+<tr><td>외장셸 (앞 / 뒤)</td><td>2</td><td>1,047.7 / 1,129.8</td><td>—</td></tr>
+<tr><td>범퍼</td><td>2</td><td>325.6 ×2</td><td>—</td></tr>
+<tr><td>소형카메라</td><td>6</td><td>15.4 ×6</td><td>—</td></tr>
+</tbody>
+</table>
+<p>바퀴·휠마운트·휠클램프는 <code>swerve_base</code> 의 옛 그룹이고, 통합 스크립트가 이 셋을 빼고 Design-D 클램프·실제 모터 STEP 으로 바꿔 끼운다.</p>
+
+<h3>10:57 — <code>tools/bom/bom.py</code></h3>
+<p>새 도구는 세 가지를 줄 단위로 구분한다: 수량·부피·질량은 형상에서(정확), 프로파일 절단은 <code>tslot.cut_list</code> 와 같은 100 mm 올림 규칙(정확), 단가는 스크립트 맨 위 <code>PRICE</code> 표(<code>확인</code> 태그 4개만 실주문 값, 나머지는 <code>추정</code>). 조달은 보유 / 출력 / 구매 셋으로 나눠 "전부 신품" 과 "지금 추가로 드는 돈" 두 합계를 낸다. 환경변수는 <code>vehicle_shell_integration</code> 과 같게 맞춰(DRIVE=skid, MOUNT=low, PAYLOAD=cargo, TOP_RAIL_Y=210, SHELL_Y=255, SHELL_WHEEL_Y=263.7) 뷰어에 보이는 것과 견적이 갈리지 않게 했다. 결과는 <code>docs/bom.md</code> 와 <code>docs/bom.csv</code> 로 저장된다.</p>
+<p>첫 실행 출력 끝에 철물 집계가 찍혔다 — 다이캐스팅 브라켓 3025 28개 10,080원(조인트 28곳 자동 검출), M6x15 84개 5,880원(브라켓 56 + 휠마운트 16 + 셸 12 + 축캡 0), 스프링너트 306 84개 15,120원, 철물 합계 31,080원. 단, 이 네 줄은 <code>bom.py</code> 가 아니라 임포트된 <code>swerve_base.py</code> 자체의 print 블록이고, "휠마운트 16" 은 옛 휠마운트 기준이다. <code>bom.md</code> 표에서는 M6x15 68개 4,760원(브라켓 56 + 셸 12) + 스프링너트 68개 12,240원으로 잡고, Design-D 하부 클램프 볼트 8개와 타이 브래킷 볼트 8개를 따로 행으로 냈다. 절단 목록은 760 mm 4본(32단위, 버림 160 mm), 390 mm 8본(32단위, 버림 80 mm), 143 mm 6본(12단위, 버림 342 mm), 프레임 총 7.02 m / 7.28 kg.</p>
+<p>이어서 패치 세 번: <code>PRINT_JOBS</code> 를 넣어 출력 총량·시간을 집계했고(0.4 노즐 / 0.2 층 / 유효 토출 10 mm³/s 기준, <code>FLOW = 10.0</code>), 다음으로 Ender-3 V3 SE 베드(220×220×250) 초과 검사를, 마지막으로 판재 대안 표를 붙였다. 53줄 BOM 의 요약(09-15 현재 <code>docs/bom.md</code> 와 같다):</p>
+<table>
+<thead><tr><th>구분</th><th>금액</th></tr></thead>
+<tbody>
+<tr><td>보유 (프레임·모터·기존 클램프·철물·배터리)</td><td>471,840원</td></tr>
+<tr><td>출력 (필라멘트만)</td><td>563,256원</td></tr>
+<tr><td>구매</td><td>941,382원</td></tr>
+<tr><td><strong>전부 신품 기준</strong></td><td><strong>1,976,478원</strong></td></tr>
+<tr><td><strong>지금 추가로 드는 돈 (출력+구매)</strong></td><td><strong>1,504,638원</strong></td></tr>
+</tbody>
+</table>
+<table>
+<thead><tr><th>카테고리</th><th>금액</th></tr></thead>
+<tbody>
+<tr><td>1. 프레임</td><td>99,280원</td></tr>
+<tr><td>2. 판재</td><td>51,342원</td></tr>
+<tr><td>3. 구동부</td><td>242,760원</td></tr>
+<tr><td>4. 외장·차체</td><td>171,105원</td></tr>
+<tr><td>5. 전자·제어</td><td>495,000원</td></tr>
+<tr><td>6. 센서·표시</td><td>382,000원</td></tr>
+<tr><td>7. 적재함</td><td>534,991원</td></tr>
+</tbody>
+</table>
+<p>대조: <code>docs/build-log.md</code> 32절에는 08월에 낸 예상 제작비(베이스만 482,000 ~ 992,000원, 출력·판재는 학교 장비 0원 가정, 철물 84/84개도 같은 수)가 이미 있었다. 이번 BOM 은 필라멘트 값을 넣고 적재함까지 포함하므로 기준이 다르다. 이 턴의 기록에는 32절을 참조한 흔적이 없다.</p>
+
+<h3>11:01 — 출력 406시간, 베드 초과 14건</h3>
+<p>출력물 합계가 14,600 cm³ / 약 406시간이었다. 프린터 한 대로 붙어 있으면 17일이다(406 h ÷ 24). 그리고 베드에 안 들어가는 부품이 14건 나왔다 — 적재함 셸 810×510×269(24조각), 외장셸 ×2 510×404×254(각 12조각), 장비베이 지붕 810×510×40(12조각), 뚜껑 529×349×58(6조각), 배터리브라켓·범퍼 ×2·슬라이드채널 ×3·장비마운트 2종·바구니크래들까지. Claude 는 24조각을 붙이는 것은 설계가 아니라고 판단해, 셸 4가지를 같은 부피의 벽 두께로 전개해 3 mm 판재로 환산한 대안 표를 넣었다(굽힘·이음 공수는 미포함, 면적 값만).</p>
+<p>이 구간의 렌더는 docs/images 에 없다.</p>
+<table>
+<thead><tr><th>부품</th><th>벽</th><th>전개 면적</th><th>출력</th><th>판재</th><th>출력 시간</th></tr></thead>
+<tbody>
+<tr><td>외장셸</td><td>3 mm</td><td>0.73 m²</td><td>82,963원</td><td>34,840원</td><td>60 h</td></tr>
+<tr><td>적재함 셸</td><td>5 mm</td><td>1.04 m²</td><td>197,316원</td><td>49,717원</td><td>144 h</td></tr>
+<tr><td>장비베이 지붕</td><td>5 mm</td><td>0.43 m²</td><td>82,199원</td><td>20,712원</td><td>60 h</td></tr>
+<tr><td>뚜껑</td><td>3 mm</td><td>0.53 m²</td><td>60,715원</td><td>25,497원</td><td>44 h</td></tr>
+<tr><td><strong>합계</strong></td><td></td><td></td><td><strong>423,193원</strong></td><td><strong>130,766원</strong></td><td><strong>309 h</strong></td></tr>
+</tbody>
+</table>
+<p>판재로 가면 292,427원과 309시간(전체 출력 시간의 76%)이 빠져 추가 지출은 1,504,638 → 1,212,211원이 된다. 대신 재단·굽힘 공수와 이음 철물이 붙는다는 단서를 같이 적었다.</p>
+
+<h3>11:03 — 당장 구매분 산정</h3>
+<p>타이만 붙이려면 구매분이 M6x20 16개 1,440원(브래킷 8 × 탭 2단, 단가 90원 추정) + 드롭인 T너트 M6 8개 2,800원(단가 350원 추정) = 4,240원이고, 타이 프로파일 2본은 남는 390 mm 3030 을 재활용해 0원이다. 클램프 4개 + 브래킷 8개 출력분은 필라멘트 약 16,000원, 13시간으로 Claude 가 답했다 — 상세 행으로 다시 셈하면 클램프 14,416원(3.2 h/개 × 4 = 12.8 h) + 브래킷 1,544원(6.2 cm³ × 8 ≈ 1.4 h) = 15,960원 / 약 14 h 다. 답변에서는 이를 "휘어짐 28배 개선이 2만원과 하루" 라고 정리했는데, 28배라는 값은 이 구간에서 계산되지 않았고 <code>CLAUDE_HANDOFF.md</code>·<code>FEA.md</code> 에도 없다. 이전 구간의 타이 해석 값으로 보이나 확실하지 않다.</p>
+<p>이 턴에서 만진 <code>vehicle_shell_integration.py</code>, <code>tools/bom/</code>, <code>docs/bom.*</code> 는 커밋하지 않았다 — <code>parameters.py</code>/<code>low_clamp.py</code> 에 남아 있는 타이 길이 360 vs 390 미결정분과 섞이면 안 되기 때문이다. 09-15 현재도 여섯 파일 모두 미커밋(M / ??) 상태이고, <code>parameters.py</code> 는 <code>TIE_PROF_LEN = 360.0</code> ("여분 390 에서 30 잘라낸다") 이다.</p>
+
+<h3>09-15 19:06 — 세션 일지화, Trilium 경로 조사</h3>
+<blockquote>우리 이 세션 대화 기록 토대로 했던것들 이런저런것들 정리해서 일지화해서 trilium note 에 root 에 트리 하나 파서 문서화해볼래?</blockquote>
+<p>Trilium 에 쓰는 도구가 없었다. Claude 의 조사 결과: 지연 툴 검색 "trilium" 은 0건, 이 세션의 커넥터는 Adobe·Notion·visualize·scheduled-tasks 뿐이었다. 예전 세션 기록 두 개(freecadAi, Pill-Box)에 trilium 언급이 있었고, freecadAi 쪽 기록에서 <code>claudeAiMcpEverConnected</code> 에 "claude.ai Trilium" 이 잡혔다 — 한때 claude.ai 커넥터로 연결했던 흔적이다. <code>claude mcp list</code> 는 서버 없음, <code>~/.claude.json</code> 에는 <code>D:/fusion3dclaude</code> 의 fusion 만 있었다. 로컬 포트 8080 / 37840 / 37841 / 8081 을 찔러 보니 37840 만 응답했고(<code>/api/app-info</code> 403), <code>/etapi/app-info</code> 는 401 NOT_AUTHENTICATED 를 돌려줬다 — 서버는 있는데 ETAPI 토큰이 없다. <code>%APPDATA%/trilium-data/config.ini</code> 에는 토큰이 없고(<code>[Security]</code> 에 backendScriptingEnabled=false 뿐) <code>document.db</code> 는 99,287,040 바이트(≈ 99 MB)였다.</p>
+<p>이어서 원본 대화 기록을 색인했다: <code>ec66e9a8….jsonl</code> 83,989,075 바이트 / 10,775줄, type 집계로 assistant 4,079 · user 2,418(도구 결과도 user 타입으로 잡히므로 사람이 친 발언 수는 이보다 적다). 사용자 발언 색인에는 07-27 19:03 KST "바퀴 꼭대기보다 데크를 높이고…" 같은 초기 요구가 줄 번호(220)와 함께 잡혔다. 이 구간은 색인 결과를 읽는 데서 끝난다 — 실제 Trilium 에 노트를 만드는 과정과 이 일지 자체는 다음 구간의 일이다.</p>
+
+<h3>결정</h3>
+<ul>
+<li>BOM 은 손으로 적지 않고 형상에서 뽑는다. 수량·부피·질량·절단은 코드가 내고, 사람은 <code>PRICE</code> 표만 만진다. <code>확인</code> 태그(프로파일 950/100 mm, 브라켓 360, M6x15 70, 스프링너트 180)만 실주문 값이고 나머지는 눈대중이라 배로 틀릴 수 있다고 명시했다.</li>
+<li>조달을 보유/출력/구매로 갈라 "전부 신품" 과 "추가 지출" 을 따로 낸다.</li>
+<li>큰 셸 4종은 출력이 아니라 판재로 가는 쪽을 대안으로 문서에 남겼다. 확정은 아니다.</li>
+<li>통합 뷰어 스크립트는 볼트 길이·타이를 <code>parameters</code> 에서 읽는다. 상수를 박아 두면 실측(15 mm)과 어긋난 채 남는다는 것을 이날 또 확인했다.</li>
+</ul>
+
+<h3>현재 저장소와의 차이</h3>
+<ul>
+<li>이 구간에서 만진 <code>vehicle_shell_integration.py</code>(M), <code>tools/bom/</code>(??), <code>docs/bom.md</code>·<code>docs/bom.csv</code>(??) 는 09-15 현재 그대로 미커밋이다. <code>docs/bom.md</code> 내용은 이날 마지막 실행 결과와 같다.</li>
+<li><code>models/swerve_base.py</code> 는 2,961줄로 변함이 없다.</li>
+<li><code>parameters.py</code> 는 <code>TIE_PROF_LEN = 360.0</code> 이고, <code>docs/bom.md</code> 타이 행도 "3030 L360 · 남는 390 mm 재활용 (390 → 360 절단)" 으로 360 기준이다.</li>
+</ul>
+
+<h3>남긴 일</h3>
+<ul>
+<li>타이 프로파일 길이 360 vs 390 확정 후 <code>parameters.py</code>·<code>low_clamp.py</code>·BOM 을 함께 커밋한다(BOM 상세 표에는 "390 → 360 절단" 으로, <code>parameters.py</code> 에는 360.0 으로 잡혀 있다).</li>
+<li>셸·적재함 판재 전환을 실제로 할지 결정하고, 하면 재단·굽힘 공수와 이음 철물을 BOM 에 넣는다.</li>
+<li>전자·제어 495,000원, 센서·표시 382,000원처럼 <code>추정</code> 단가가 대부분인 항목을 실제 견적으로 바꾼다.</li>
+<li>Trilium ETAPI 토큰을 사용자가 발급해야 노트를 쓸 수 있다. 이 일지 작성 자체가 그 후속 작업이다.</li>
+<li>이날 뷰어의 전체 차량 화면은 파일로 남기지 않았다 — <code>iso_render</code> 로 한 장 굽는 편이 좋다.</li>
+</ul>
+<p>1순위(타이 길이)의 판단 근거: 09-10 10:47 에 이어 붙은 이전 대화 요약(컨텍스트 압축본)에는 마지막 방향이 "남는 390 mm 3030 프로파일을 쓰고, 부품 표준화를 위해 길이도 360 이 아니라 390 으로 유지한다" 로 적혀 있었다. 그런데 같은 요약이 옮겨 적은 <code>parameters.py</code> 스냅샷도, 09-15 현재 저장소의 <code>parameters.py</code> 도 <code>TIE_PROF_LEN = 360.0</code>("여분 390 에서 30 잘라낸다") 그대로이고, 이날 만든 <code>docs/bom.md</code> 타이 행도 "390 → 360 절단" 으로 360 을 따른다. 즉 대화에서 정한 방향(390 유지)이 코드와 BOM(360)에 반영되지 않은 채 남아 있고, 이 구간의 Claude 는 이를 "미결정분" 으로만 적어 두고 어느 쪽이 맞는지 판정하지 않았다. 확정은 사용자 몫이다 — 390 으로 가면 <code>parameters.py</code> 의 값·주석과 BOM 타이 행("390 → 360 절단")이 함께 바뀌어야 하고, 360 으로 가면 대화 요약의 "390 유지" 가 폐기된 결정임을 어딘가에 적어야 한다.</p>
+
+<h3>교훈</h3>
+<ul>
+<li>견적을 내 보니 병목은 돈이 아니라 출력 시간(406 h)과 베드 크기였다. 부피를 먼저 집계하지 않았으면 "24조각" 문제가 보이지 않았을 것이다.</li>
+<li>통합 스크립트는 개별 모델보다 늦게 썩는다. <code>M6x20</code> 고정값처럼, 파라미터를 참조하지 않는 라벨·치수는 실물이 바뀌어도 그대로 남는다.</li>
+<li>서브에이전트 Bash 는 cwd 와 <code>TMPDIR</code> 을 믿을 수 없다 — 절대경로만 쓴다.</li>
+<li>외부 도구(Trilium)는 먼저 있는지, 인증이 되는지부터 확인하고 계획을 세운다. 이번엔 서버(37840)는 있었지만 토큰이 없었다.</li>
+</ul>

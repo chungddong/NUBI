@@ -1,0 +1,17 @@
+Design-D lower clamp open-source FEA
+Load: 800.0 N downward on axle seat
+Mesh target: 4.000 mm, quadratic C3D10 tetrahedra
+Elements: 24128
+Fixed nodes (six bolt-hole walls): 1560
+Loaded axle-seat nodes: 469
+Force per loaded node: -1.705756930 N
+Material: AL6061-T6, E=68900 MPa, nu=0.330
+Reference yield strength: 276.0 MPa
+VTU point fields: E, ERROR, E_Mises, E_Principal, RF, S, S_Mises, S_Principal, U
+Max von Mises from VTU: 3.613323236457956 MPa
+Max displacement from VTU: 0.0013899889399716855 mm
+Boundary model: rigid support on six rail-fastener hole walls.
+Interpretation: comparative linear-static model; no bolt preload/contact/fatigue yet.
+FRD: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h4mm\design_d_lower_clamp.frd
+VTU: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h4mm\design_d_lower_clamp.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\clamp_800N_h4mm\stress_deformed_800N.png

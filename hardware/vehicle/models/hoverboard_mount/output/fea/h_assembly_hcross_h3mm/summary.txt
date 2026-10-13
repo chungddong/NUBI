@@ -1,0 +1,30 @@
+Bonded assembly FEA — H cross 3030 x 390 + tongue (bonded)
+Case: hcross   env: {'LOW_SHELF': '1', 'SHELF_KIND': 'tongue', 'TIE': '0', 'LOW_SIDE': '0', 'TONGUE': '0'}
+STEP: D:\build123d\models\hoverboard_mount\output\step\h_assembly_hcross.step   solids after fuse: 1
+Rail stubs 2 x (30x30 wall 2.15 equivalent tube, L=240.0) at y=+/-210.0, z=108.85; ends x=+/-120 fixed (912 nodes)
+Clamps: low_clamp() at y=+/-263.7, z=+79.35 (-y side rotated 180 deg about z)
+H cross: 30x30 tube L=390.0 at z=108.85, ends bonded to rail inner faces; tongue top bonded to cross bottom
+Load: 800 N upward on each axle seat, eccentricity 55 mm outboard (inboard/outboard couple as in run_clamp_fea)
+Load terms [set, nodes, total N, per-node N]:
+  SEAT_L_OUTBOARD: 371, 2180.201861, 5.876554880
+  SEAT_L_INBOARD: 360, -1380.201861, -3.833894057
+  SEAT_R_OUTBOARD: 364, 2175.840251, 5.977583106
+  SEAT_R_INBOARD: 367, -1375.840251, -3.748883517
+Mesh: target 3.0 mm (min 1.2), C3D10; elements 205544 (clamp 127298, aluminium 78246), nodes 356416
+Materials: clamps PETG isotropic estimate E=2100 nu=0.38; profile aluminium 6063-T5 profile E=69000 nu=0.33
+Solve: 105 s (OMP_NUM_THREADS=4)
+Seat camber (dUz/dy_out, + = outboard rises):
+  left: +6.2438 mrad  (n=731, Uy_out +0.0273 mm, Uz mean +0.0837 mm, contact splay -0.4682 mm)
+  right: +6.2501 mrad  (n=731, Uy_out +0.0273 mm, Uz mean +0.0829 mm, contact splay -0.4687 mm)
+Load-path diagnostics (rail bottom at x~0; leg tops z=93.85):
+  left: rail-stub twist +1.689 mrad, rail rise +0.0230 mm, leg-top slope +2.085 mrad, cross bottom Uz at tongue tip -0.0661 mm, cross top mid Uz -0.1111 mm
+  right: rail-stub twist +1.694 mrad, rail rise +0.0230 mm, leg-top slope +2.086 mrad, cross bottom Uz at tongue tip -0.0661 mm, cross top mid Uz -0.1111 mm
+Max |U|: 0.253996 mm (clamp region 0.253996)
+Clamp structural stress (clamp nodes > 2.0 mm from bonded faces): 31.159 MPa at x=-10.0 y=-186.7 z=+78.9
+Clamp max von Mises incl. bond edges (do not quote): 31.159 MPa
+Aluminium profile max von Mises: 32.644 MPa
+Reaction at fixed rail ends [Fx,Fy,Fz]: [0.0004, -0.0001, -1599.9997]  (applied Fz total +1600.0)
+Sum of all RF: [0.0004, -0.0001, 0.0001]
+Limits: bonded (no T-nut/bracket/bolt compliance, no preload/contact) -> joint stiffness overestimated; one C3D10 layer through the 2.15 mm tube wall; equivalent square tube matches 3030 bending I only.
+VTU: D:\build123d\models\hoverboard_mount\output\fea\h_assembly_hcross_h3mm\h_assembly.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\h_assembly_hcross_h3mm\stress_deformed_800N.png

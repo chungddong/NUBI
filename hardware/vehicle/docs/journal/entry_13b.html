@@ -1,0 +1,109 @@
+<p>이 구간은 Claude 대화 기록에 없다. 08-15 13:42 에 구독 접근 비활성화(403)로 세션이 끊긴 뒤 사용자가 GPT/Codex 로 작업을 이어갔고, 08-21 00:17 에 Claude 가 다시 시작하면서 "gpt 랑 좀 작업을 했었는데 … 인수인계 내용 확인을 좀 해볼래?" 로 넘겨받았다. 그 사이 대화는 어디에도 없고 남은 것은 파일뿐이다 — 인수인계 문서 3개(<code>CLAUDE_HANDOFF.md</code>·<code>FEA.md</code>·<code>CLAUDE.md</code>), 새 스크립트 십여 개, <code>tools/fea/</code> 툴체인, <code>output/fea/</code> 결과 폴더 11개(Design-D 편심 55 폴더 3개는 08-21 재실행으로 덮였고, 그중 PETG 폴더는 08-27 에 한 번 더 덮였다)와 보고서 2개. 아래 시각은 전부 파일 mtime 이고, 인수인계 두 문서는 08-21 에 Claude 가 고쳐 써서 GPT 시점 원문은 없다. 이 구간의 렌더는 docs/images 에 없다 (조립 GIF 는 <code>output/animation/hoverboard_clamp_assembly.gif</code> 에만 있다).</p>
+
+<h3>08-15 15:59 ~ 08-16 00:31 — 도면 실행, 조립 애니메이션</h3>
+<p>세션이 끊기며 못 돌린 <code>drawing.py</code> 가 실행돼 <code>output/drawing/</code>·<code>output/dxf/</code> 폴더가 생겼다(폴더 15:59/16:00, 파일은 08-21 07:59 에 재생성). 이어 <code>extrusion_reference.py</code>(18:09), <code>README.md</code>(20:28), <code>motor_reference.py</code>(22:08) 가 바뀌었다. README 는 이 시점 형상 — 플랜지 있는 92.7×46.6×63.9, 143 cm³, 밑면 M6×20 ×2 + 옆면 ×4 — 기준이고 "<code>LOW_SIDE = False</code> 로 플랜지를 끄면 인발 96% 만 남는다. 끄지 마라" 가 들어 있다.</p>
+<p><code>load_visualization.py</code>(23:10) 는 800 N 화살표와 두 경로 — 바닥 인발 1432 N/개(95%), 옆면 전단 716 N/개(9%) — 를 뷰어 토글 객체로 만든다. <code>assembly_animation.py</code>(23:48) 와 오프라인판 <code>render_assembly_gif.py</code>(08-16 00:31, 4 fps · 720×540 · 12 s) 는 조립 6단계를 움직인다.</p>
+<ol>
+<li>하부 클램프 배치</li>
+<li>휠모터 축을 하부 시트에 수직 하강으로 안착 (옆에서 관통시키지 않는다)</li>
+<li>상부 클램프 장착 (휠 상단보다 위에서 대기)</li>
+<li>3030 프로파일을 끝에서 X 방향으로 밀어 넣기</li>
+<li>측면 M6×20 4개</li>
+<li>바닥 M6×20 2개 (카운터보어 아래에서 위로)</li>
+</ol>
+<p>플랜지가 있던 형상의 순서다. 인수인계 §5 의 현재 6단계는 08-21 에 고쳐진 판으로, 상·하부 클램프를 먼저 체결한 뒤 프로파일을 <strong>위에서 얹고</strong> 바닥 볼트 2개(M6×15)만 조인다. "상부 클램프를 먼저 닫아 놓은 뒤 축을 통과시키거나, 프로파일을 먼저 장착한 상태에서 위쪽 클램프 볼트에 접근하는 순서는 쓰지 않는다"는 원칙은 두 판이 같다.</p>
+
+<h3>08-16 17:03 — 절곡 강판 대안 bent_lower_clamp.py</h3>
+<p>CNC 통짜 대신 레이저 절단 + 프레스 절곡 3부품 안이다: 6 mm SS400 U 브래킷(축 지지, 외폭 76 · 깊이 38), 6 mm SS400 햇 브래킷(3030 밑면·양 옆면 감싸기, 폭 92 · 플랜지 높이 24), 2.5 mm 교체형 V 축받침. 축·상부 클램프·레일·M6 좌표는 Design-D 와 같다. 인수인계 "중요 파일" 목록에 없어 검토 결과는 모른다.</p>
+
+<h3>08-16 21:31 ~ 08-17 03:00 — 프레임 폭 450 통일과 차량 장면</h3>
+<p><code>export_low_clamp_step.py</code> 는 STEP 을 내보낸 뒤 다시 읽어 부피 오차 1e-3, 외형 1e-6 안인지 검사한다. <code>swerve_base.py</code>(08-17 02:16 이 마지막 수정) 에는 <code>SHELL_Y</code>·<code>TOP_RAIL_Y</code>·<code>SHELL_WHEEL_Y</code>·<code>WHEEL_ARCH_CLR</code>·<code>HUB_MOCK</code> 환경변수 덮어쓰기와 <code>COMPACT_SHELL = SHELL_Y &lt; 280</code> 분기가 있고, 같은 시각의 <code>vehicle_cargo_integration.py</code>(11줄, <code>VEHICLE_PAYLOAD=cargo</code>) 와 그것이 import 하는 <code>vehicle_shell_integration.py</code>(현재 파일 mtime 은 09-10 이지만 초기 커밋 판에 같은 값이 있다) 가 이를 쓴다 — <code>TOP_RAIL_Y=210</code>, <code>SHELL_Y=255</code>(셸 폭 510), <code>SHELL_WHEEL_Y=263.7</code>. <code>vehicle_flat_abs_integration.py</code>(03:00) 는 라운드 셸을 3 mm ABS 평판(각진 하부 외장, 사각 데크, 4면 적재함 + 평판 덮개)으로 바꾼 비교 장면이다.</p>
+<p>프레임 변경의 골자는 인수인계 §3 이다. 3030 프레임 760×450 에서 상부 폭을 하부와 같은 450 으로 맞췄고 높이는 그대로다. swerve_base 기본값 <code>TOP_RAIL_Y=265</code> 면 상부 크로스가 2×265−30 = 500 이었는데, 210 이면 450−30−30 = 390 이다. 휠 축 X=±210, 휠 중심 Y≈±263.7 (레일 중심 210 + 클램프 오프셋 53.7).</p>
+<table><thead><tr><th>390 mm 프로파일</th><th>수량</th></tr></thead><tbody>
+<tr><td>하부 크로스</td><td>3</td></tr>
+<tr><td>상부 크로스</td><td>3</td></tr>
+<tr><td>축 하중 보강 크로스 (x=±265)</td><td>2</td></tr>
+<tr><td>합계</td><td>8</td></tr>
+</tbody></table>
+<p>기존 상부 500 ×3 은 390 으로 잘라 재사용할 수 있다. 새로 산다면 상부 변경분 3개, 실차에 축 보강 크로스 2개가 없으면 총 5개, 카메라 받침 크로스까지 달면 390 한 개 추가. <code>vehicle_integration.py</code> 가 발주 확인용 기준 장면이고 그룹은 다섯 — 변경차량_3030프레임_상하폭450 / DesignD_하부클램프_4개 / 기존_상부클램프_4개 / 실제_휠모터_STEP_4개 / 프로파일체결볼트(이 구간에서는 M6×20 24개, 08-21 이후 M6×15 8개).</p>
+
+<h3>08-18 00:29 ~ 00:48 — FEA 파이프라인 구축, 편심 0·하향 첫 결과</h3>
+<p><code>load_analysis_viewer.py</code>(00:29) 는 800/1600/2400 N 케이스, 위험부 A(축 시트)·B(플랜지 뿌리)·C(카운터보어 잔여두께), 구동토크 29 N·m 를 그룹으로 나눈 뷰어 장면인데 이름에 "색상은 FEA 응력값 아님" 을 박았다. 실제 해석은 00:35~00:40 에 <code>tools/fea/</code> 로 들어온 툴체인이 한다: Gmsh 4.15.2(<code>gmsh_pyenv</code>), CalculiX 2.23 Windows(<code>calculix_2.23_4win.zip</code> 61.7 MB), meshio·ccx2paraview 3.2.0·numpy(<code>python/</code>).</p>
+<pre><code>STEP → Gmsh C3D10 2차 사면체 → CalculiX 선형 정적 → ccx2paraview VTU → VTK 응력/변형 PNG</code></pre>
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\fea\run_clamp_fea.ps1 `
+  -Model design_d -Material al6061 -Load 800 -MeshSize 3 `
+  -Eccentricity 55 -LoadDirection upward</code></pre>
+<p><code>run_clamp_fea.ps1</code> 은 <code>.venv</code> 파이썬을 먼저 시험하고 안 되면 Codex 번들 파이썬으로 떨어진다 — 이 구간에 <code>.venv</code> 가 깨졌다고 믿고 있었다는 흔적이다. 기본값이 <code>Eccentricity 0</code>·<code>downward</code> 라서 옵션을 빼면 편심 0 케이스가 돈다. 재료 카드는 AL6061-T6(E 68,900 MPa, ν 0.33, 항복 276)과 PETG 등방 근사(E 2,100, ν 0.38, 항복 45) 둘뿐이다. 고정은 레일 체결 구멍 벽 노드 XYZ 강체 고정, 하중은 축 시트 표면 노드 균등 분배.</p>
+<p>첫 결과(00:46/00:48, 플랜지 있는 63.9 mm 형상, 구멍 6개 고정, 편심 0 하향):</p>
+<table><thead><tr><th>메쉬</th><th>C3D10 요소</th><th>최대 von Mises</th><th>최대변위</th></tr></thead><tbody>
+<tr><td>4 mm</td><td>24,128</td><td>3.613 MPa</td><td>0.001390 mm</td></tr>
+<tr><td>3 mm</td><td>46,928</td><td>4.036 MPa</td><td>0.001400 mm</td></tr>
+</tbody></table>
+<p>변위 차 0.7%, 응력 차 11.7%, 반력 합 Fz = +800 N. 이 4.036 MPa 가 GPT 시점 FEA.md 의 "기준 결과" 였다.</p>
+
+<h3>08-18 01:46 ~ 02:03 — 구형 긴 ㄷ자와 동일조건 비교</h3>
+<p><code>exports/cnc/휠마운트_cnc_M6.step</code>(70×40×176.35, 202.8 cm³, 거싯 있음)을 같은 조건으로 돌려 <code>comparison_800N.md</code> 를 썼다.</p>
+<table><thead><tr><th>형상</th><th>3 mm 요소</th><th>최대응력</th><th>최대변위</th><th>구형/현재형</th></tr></thead><tbody>
+<tr><td>Design-D (137.0 cm³)</td><td>46,928</td><td>4.036 MPa</td><td>0.001400 mm</td><td>1.00×</td></tr>
+<tr><td>구형 긴 ㄷ자</td><td>58,158</td><td>15.816 MPa</td><td>0.009374 mm</td><td>응력 3.92×, 변위 6.70×</td></tr>
+</tbody></table>
+<p>등가 수직강성 571.6 vs 85.3 kN/mm. 반력 분배는 Design-D 가 바닥 2개 53.4% / 측면 4개 46.6%, 구형이 아래팔 볼트 81.7% / 위팔 18.3%. 보고서 스스로 범위 경고를 달았다 — 축중심 하중이라 접지점 편심 55 mm 의 44 N·m 가 빠졌고, STEP 은 파손 뒤 거싯이 붙은 AL6061 형상이라 PETG 출력품 파손 검증이 아니다.</p>
+
+<h3>08-18 02:13 ~ 02:27 — 구형 브라켓 파손 재현 legacy_u_nogusset</h3>
+<p>그래서 실물 조건을 따로 만들었다. <code>wheel_mount.py</code> 에 <code>NO_GUSSET</code>·<code>U_OPEN_INBOARD</code> 환경변수를 넣고 <code>export_legacy_ungusseted.py</code> 로 거싯 없는, ㄷ자 열린 면이 차량 내부를 향하는 STEP 을 뽑았다. 조건: PETG, 800 N, 편심 55 mm(44 N·m), 위·아래 볼트 4개 고정. 02:16/02:18 에 하향으로 먼저 돌렸고(02:13 자 <code>legacy_u_bracket_no_gussets.step</code>, 열린 면 방향 미반영; 3 mm 62.329 MPa / 2.955 mm — 폴더 summary.txt 값, 문서에는 없다), 02:19 에 ps1 이 바뀐 뒤(<code>-LoadDirection</code> 이 이때 들어간 것으로 보인다) 02:24/02:26 에 상향으로 다시 돌렸다. 상향이 프레임을 고정했을 때 노면이 바퀴를 미는 방향이고, 하향은 응력 크기는 비슷해도 휘는 방향이 사진과 반대다.</p>
+<table><thead><tr><th>메쉬</th><th>요소</th><th>최대응력</th><th>최대 전체변위</th><th>최대 바깥방향 변위</th></tr></thead><tbody>
+<tr><td>4 mm</td><td>27,903</td><td>45.917 MPa</td><td>2.967 mm</td><td>약 2.81 mm</td></tr>
+<tr><td>3 mm</td><td>55,892</td><td>44.373 MPa</td><td>2.979 mm</td><td>2.819 mm</td></tr>
+</tbody></table>
+<p>최대응력은 아래 볼트열 부근 [15.4, −53.3, 170.3] mm. 긴 다리의 바깥방향 변위 중앙값은 z 180~212 에서 약 0.005 mm, 140~160 에서 0.241, 100~120 에서 1.123, 60~80 에서 2.389 mm 로 내려갈수록 커진다 — 사용자가 본 "아래 볼트 부근부터 바퀴 쪽으로 갈수록 바깥으로 휘어짐" 과 맞는다. PETG 항복 45 대비 사용률 약 99%. 같은 편심 55·상향을 Design-D AL6061(구멍 6개 고정)에 주면 17.677 MPa / 0.007293 mm, 구형 대비 응력 2.51 배 낮다(<code>legacy_failure_reproduction.md</code>). 이 17.677 이 GPT 시점 인수인계의 "기준" 이었다.</p>
+
+<h3>08-19 23:31 — STL 내보내기</h3>
+<p><code>export_clamp_stl.py</code> 가 하부 클램프와 OEM 상부 참조를 최저면 z=0 으로 옮겨 바이너리 STL 로 저장하고 헤더(84 + 50×삼각형 수 바이트)를 검사한다. 08-20 자 파일은 없다. 이 STL 로 출력한 것을 사용자가 08-21 낮에 달아 봤고 그 결과가 다음 편이다.</p>
+
+<h3>인수인계 문서에 적힌 규칙</h3>
+<p>§8 결과 이미지: 흰 와이어프레임이 원형, 색칠 메쉬가 변형 형상, <code>Deformation display: Nx</code> 는 확대율이고 숫자로 적힌 최대변위만 실제 값. 파랑→빨강은 von Mises 증가 순서라 따뜻한 색은 변위가 아니라 응력이 큰 곳. <code>S_Mises</code> 가 응력, <code>U</code> 가 변위, <code>E_Mises</code> 는 변형률이라 응력으로 읽지 않는다. §9 검증: 형상 변경 → STEP 재생성 → 4 mm 로 노드 분류·솔버 오류 확인 → 3 mm 수렴 비교 → 반력 합 = 입력 하중 → PNG 에서 고정면·하중면·휘는 방향 확인 → 비교 모델은 같은 방향·편심·재료·메쉬 규칙 → 최대점 하나가 아니라 분포와 전체 변형을 본다. §11 안전 판단: 800 N 은 시험으로 확정한 허용하중이 아니라 비교용 코너 하중, 정적 선형해석만으로 탑승 허용중량이나 인증을 선언하지 않는다, 출력품은 무부하 조립 → 지그 정적시험 → 무인 저속시험 순, 최종 클램프는 AL6061-T6, 실제 허용하중은 휠/축/베어링/프로파일/T너트/볼트/프레임/제동 중 가장 낮은 한계가 정한다. 600 N = 약 61.2 kgf 는 한 바퀴 힘이지 차량 총질량이 아니다 — 차량 40 kg + 사람 70 kg 이면 정적 총중량 약 1,079 N 이고 편중·비틀림·탑승 충격으로 한쪽에 400~650 N, 순간 800 N 이상이 걸릴 수 있다.</p>
+<p>FEA.md §8 은 코너 하중을 총중량으로 바꾸는 식이다.</p>
+<pre><code>gross_mass_kg = 4 × F_corner /
+                (9.81 × K_dynamic × K_imbalance)</code></pre>
+<p>800 N 에 <code>K_dynamic=2.0</code>, <code>K_imbalance=1.3</code> 이면 약 125 kg — 잠정 설계 목표이지 허용중량이 아니며, 여기서 차량 자중을 빼고 가장 낮은 부품 한계를 적용한다.</p>
+
+<h3>확실하지 않은 것</h3>
+<ul>
+<li>시각은 전부 mtime 이다. 08-21 세션에서 Claude 가 "이 머신의 시계가 왔다갔다 한다" 고 적었으니 순서는 믿되 절대 시각은 참고만 한다.</li>
+<li>GPT 가 무엇을 시도하고 버렸는지 모른다. <code>bent_lower_clamp.py</code>, <code>vehicle_flat_abs_integration.py</code> 가 검토안인지 채택안인지 문서에 없다.</li>
+<li>GPT 시점 <code>CLAUDE_HANDOFF.md</code>·<code>FEA.md</code> 원문은 없다. 08-21 00:17 에 280 / 226 줄이었고, FEA.md 는 4.036 MPa(편심 0 하향), 인수인계는 17.677 MPa(편심 55 상향)를 각각 "기준" 이라 불렀으며 <code>.venv</code> 가 깨졌다는 경고가 있었다는 것만 다음 편에서 확인된다.</li>
+<li>README 의 143 cm³ 와 08-18 비교표의 137.0 cm³ 가 왜 다른지 — 그 사이 형상 수정이 있었는지 — 근거가 없다.</li>
+</ul>
+
+<h3>결정</h3>
+<ul>
+<li>상·하부 프레임 폭 450 통일, 크로스 390 ×8. 길이 760 과 높이는 유지.</li>
+<li>구조해석은 뷰어 화살표(설명용)와 CalculiX 파이프라인(실제 계산)을 분리한다. 비교는 같은 하중·편심·재료·메쉬 규칙으로만 한다.</li>
+<li>구형 파손 재현 조건은 <code>legacy_u_nogusset</code> · PETG · 800 N · 편심 55 · 상향.</li>
+<li>사람 탑승 최종품은 AL6061-T6. 출력품은 치수·조립·저속 무부하용.</li>
+</ul>
+
+<h3>현재 저장소와의 차이</h3>
+<ul>
+<li><code>README.md</code> 는 08-15 20:28 그대로다 — 63.9 mm · 143 cm³ · M6×20 6볼트 · "플랜지를 끄지 마라". 현재 코드는 <code>LOW_SIDE</code> 가 환경변수(기본 꺼짐)이고 부품은 38.9 mm · 116 cm³ · M6×15 2볼트다.</li>
+<li><code>LOW_SIDE</code> 가 꺼지면 <code>side_button_head_bolts_reference()</code> 가 빈 목록을 돌려준다. 이 구간 스크립트 중 <code>assembly_animation.py</code>(이름 10개 고정)·<code>render_assembly_gif.py</code>·<code>load_analysis_viewer.py</code>·<code>bent_lower_clamp.py</code>·<code>vehicle_flat_abs_integration.py</code>("M6x20_프로파일체결볼트_24개")는 옆 볼트 4개를 전제한다. 실행해 보지는 않았다.</li>
+<li><code>run_clamp_fea.py</code>·<code>vehicle_integration.py</code>·<code>parameters.py</code> 는 08-21 과 08-27 에 다시 바뀌었다(측면 노드 선택 <code>P.LOW_SIDE</code> 조건화, 볼트 길이·개수 파라미터 유도, 액슬 타이).</li>
+<li><code>output/fea/</code> 의 편심 0·하향 폴더(<code>clamp_800N_h3mm</code>·<code>h4mm</code>, <code>legacy_u_*</code>, <code>legacy_u_nogusset_*</code>)와 보고서 2개는 08-18 자 그대로 남아 있다.</li>
+</ul>
+
+<h3>남긴 일</h3>
+<ul>
+<li>인수인계 3문서를 저장소 실제 상태와 대조 — 08-21 00:17 에 Claude 가 시작한 일이다.</li>
+<li>FEA.md §7 확장 순서: 하부+축+상부 접촉 모델 → M6 프리로드 → 3030/T너트 접촉 → 수직·제동토크·횡하중 load step → 편중 30~50%·충격 1.5~2.5배 → 실물 proof test 상관검증. PLA 재료 카드 없음.</li>
+<li>M6 스프링너트 인발 실측.</li>
+<li>절곡 강판안과 ABS 평판 셸의 채택 여부.</li>
+</ul>
+
+<h3>교훈</h3>
+<ul>
+<li>대화 없이 결과물만 남으면 "기준" 이 두 개가 된다. 조건(편심·방향·고정 구멍 수)을 숫자 옆에 같이 적지 않은 값은 다음 사람이 섞어 쓴다.</li>
+<li>기본값이 위험하다 — <code>Eccentricity 0 · downward</code> 가 기본이라 옵션을 빼면 실물과 다른 케이스가 조용히 돈다.</li>
+<li>같은 800 N 이라도 편심 55 mm 를 넣느냐가 4.036 과 17.677 MPa 를 가른다. 축중심 하중 비교는 형상 순위에는 쓰여도 파손 재현에는 못 쓴다.</li>
+<li>실물 관찰(아래 볼트열부터 바깥으로 휨)을 재현하는 조건을 찾는 것이 해석의 첫 검증이다. 방향이 반대면 응력 크기가 맞아도 틀린 모델이다.</li>
+<li>타임스탬프는 순서만 믿는다.</li>
+</ul>

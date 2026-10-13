@@ -1,0 +1,932 @@
+r"""v29_floor_wiring — 배선 바닥 정리 (2026-10-05)
+
+    .venv/Scripts/python.exe models/vehicle/v29_floor_wiring/router.py     # 경로 찾기 → routes_data.py (부품 자리를 바꾸면 다시)
+    .venv/Scripts/python.exe models/vehicle/record.py v29_floor_wiring    # 짓기·검증·STEP·DXF·BOM·뷰어·기록
+    .venv/Scripts/python.exe models/vehicle/v29_floor_wiring/inside.py   # 속 보기 (--show 로 뷰어)
+
+사용자 (2026-10-05): "최대한 바닥판에 잘 정리해봐 — 선 길이는 얼마든지 늘려도 되니 ㄱ · ㄴ 자로 휘어도 깔끔하게만".
+  -> ../DECISIONS.md D-21.
+  · 전선은 단자에서 짧게 빠져 수직으로 바닥까지, 바닥에서는 x · y 로만 (router.py — 2 mm 격자 A*, 꺾임 벌점 · 붙어 가기 · 직각 넘어가기)
+  · 부품 자리: XT90 바닥에 눕힘 · 분기 레일 90° 돌림 (출력이 옆 보드 쪽) · 음극 N 바 컨택터 남쪽 · XT60 보드 리드 끝 · 배터리 리드 5 mm 토막 + 리드 선
+
+v03 에서 바꾼 검증 · 짓기 속도 (형상과 무관)
+  · _overlap: 부품마다 바운딩박스를 **한 번만** 잰다 (빠른 박스). v02 까지는 쌍마다 모터 STEP
+    의 정밀 박스 (1.5 s) 를 다시 재서 검증만 3 분이었다. 불리언 자체는 0.2 s.
+  · _box_gap: 모터 메시를 한 번만 뜨고 Location 만 곱한다 (같은 STEP 4 개).
+  · tslot.beam: 같은 길이 토막은 한 번만 짓는다.
+
+parameters / low_clamp / axle / extrusion_reference / motor_reference 는 v01 동결 사본 그대로,
+tslot 은 beam 캐시만 더했다.
+
+버전 계약 (record.py 가 읽는다)
+  VERSION, TITLE, DATE, PREV, SUMMARY, PORT, WHEEL_KEYS
+  build()           → [dict(key, label, color, parts)]   key 는 버전 사이에 안 바뀌는 이름
+  verify(groups)    → 실패 항목 목록 (빈 목록 = 통과). 결과를 print 한다
+  metrics(groups)   → [(항목, 값)]  기록 표에 들어간다
+  compounds(groups) → 뷰어 · STEP 용 Compound 목록
+"""
+
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).parent
+sys.path.insert(0, str(HERE))
+
+import numpy as np                                          # noqa: E402
+from build123d import Align, Box, Color, Compound, Cylinder, Location, Pos, Rot   # noqa: E402
+
+import low_clamp as LC                                      # noqa: E402
+import parameters as P                                      # noqa: E402
+import tslot                                                # noqa: E402
+from motor_reference import actual_motor_step_reference     # noqa: E402
+import floor as FL                                          # noqa: E402
+import parts as PT                                          # noqa: E402
+import shell as SH                                          # noqa: E402
+import wiring as WR                                          # noqa: E402
+
+VERSION = "v29_floor_wiring"
+TITLE = "배선 바닥 정리"
+DATE = "2026-10-05"
+PREV = "v28_wiring"
+SUMMARY = "배선 바닥 정리 (진행 중) — 전선을 바닥판 위 직각 경로로 (router A*), XT90 · 분기 레일 · N 바 자리 옮김 — 검증 실패 남음 (판 2 · 선끼리 69)"
+
+PORT = 3939
+OUT = HERE / "output"
+
+# ---------------------------------------------------------------- 프레임 치수
+BASE_L, BASE_W = 760.0, 450.0       # 하부 프레임 외곽 (x, y)
+S = 30.0                            # 3030
+AXLE_X = 210.0                      # 앞뒤 축 x — 휠베이스 420
+AXLE_Z = P.WHEEL_DIAMETER / 2       # 지면 z=0
+RAIL_Y = (BASE_W - S) / 2           # 사이드 레일 중심 y = 210
+RAIL_Z = AXLE_Z + LC.RAIL_CZ        # 레일 중심 z
+CROSS_X = (BASE_L - S) / 2          # 끝 크로스 x = 365
+CROSS_L = BASE_W - 2 * S            # 레일 사이 크로스 길이 390
+# 축크로스 — **T 클램프 혀 바로 위**. 크로스 밑면이 혀 윗면(= 레일 밑면 높이)에 얹히고
+# 혀 볼트 2 개가 크로스 밑면 슬롯에 물린다. 혀 폭 30 = 크로스 폭.
+AXLE_CROSS_X = AXLE_X
+WHEEL_Y = RAIL_Y - LC.CLAMP_CY      # 클램프 로컬 레일(y=CLAMP_CY)이 차량 레일에 오는 휠 중심
+# 기둥 — 축크로스와 같은 x, 사이드 레일 윗면에 선다. 높이는 옛 상부 프레임 (v00_ref) 그대로.
+FRAME_TOP = RAIL_Z + S / 2          # 하부 레일 윗면
+POST_H = 143.0                      # 하부 레일 윗면 → 상부 레일 밑면
+# 기둥 x — 옛 설계 (v00_ref) 자리 = 끝 · 가운데 크로스. 이름은 v03 과 같은 기둥5~10.
+POST_X = (-CROSS_X, 0.0, CROSS_X)
+POST_FIRST = 5
+
+WHEEL_KEYS = ("motor",)
+
+
+def _bar(label, length, start, axis):
+    b = tslot.bar(30, length, start, axis)
+    b.label = label
+    return b
+
+
+def lower_frame():
+    beams = [_bar(f"하부사이드{i+1}", BASE_L, (-BASE_L / 2, sy * RAIL_Y, RAIL_Z), "X")
+             for i, sy in enumerate((-1, 1))]
+    beams += [_bar(f"하부크로스{i+1}", CROSS_L, (x, -CROSS_L / 2, RAIL_Z), "Y")
+              for i, x in enumerate((-CROSS_X, 0, CROSS_X))]
+    beams += [_bar(f"축크로스{i+1}", CROSS_L, (x, -CROSS_L / 2, RAIL_Z), "Y")
+              for i, x in enumerate((-AXLE_CROSS_X, AXLE_CROSS_X))]
+    return beams
+
+
+def posts():
+    """상부 프레임과 이을 기둥 — 사이드 레일 윗면에서 위로, 크로스가 레일에 붙는 x 마다."""
+    xs = [(x, sy) for x in POST_X for sy in (-1, 1)]
+    return [_bar(f"기둥{i + POST_FIRST}", POST_H, (x, sy * RAIL_Y, FRAME_TOP), "Z")
+            for i, (x, sy) in enumerate(xs)]
+
+
+# v23: 상부 프레임 — 하부와 같은 3030. 옆 레일 760 ×2 (y ±210) + 크로스 390 ×3 (x −365 · 0 · +365), 기둥 6 위.
+UPPER_Z = FRAME_TOP + POST_H + S / 2   # 상부 레일 중심 z (= 외관판 위쪽 구멍 z 281.85)
+POST_BOLT = dict(d=8.0, head_d=13.0, head_h=8.0, len=60.0)   # (v23~v25) 기둥 볼트 M8 — v26 에서 코너 브래킷으로 바꿈
+# v26: 모듈 레일 — 처음 의도 (docs/payload-interface.md: 데크 위 2020 3 본) 를 이 차에 맞춤.
+# 상부 프레임 바로 위 (덮개 아님), y = -210 · 0 · +210 (양옆은 상부 사이드 레일 중심 위), x -380~+380.
+MODULE_RAIL = dict(series=20, ys=(-210.0, 0.0, 210.0), x0=-380.0, length=760.0)
+BRACKET = dict(leg=28.0, t=4.0, w=28.0)          # 3030 코너 브래킷 (다이캐스트, 다리 28 · 두께 4 · 폭 28) [가정]
+import sensor_module as SM                        # v27: 첫 모듈 (라이다 · GNSS · 상태 표시등)
+LIDAR = dict(model="LDROBOT STL-19P", range_m=12.0, rays=500)    # 0.72° 해상도 = 500 점 · 바퀴 — scan_z 는 짓고 나서 채운다
+
+
+def upper_frame():
+    beams = [_bar(f"상부사이드{i+1}", BASE_L, (-BASE_L / 2, sy * RAIL_Y, UPPER_Z), "X")
+             for i, sy in enumerate((-1, 1))]
+    beams += [_bar(f"상부크로스{i+1}", CROSS_L, (x, -CROSS_L / 2, UPPER_Z), "Y")
+              for i, x in enumerate((-CROSS_X, 0, CROSS_X))]
+    return beams
+
+
+def module_rails():
+    """v26: 모듈 레일 2020 ×3 — 상부 프레임 윗면 (z 296.85) 에 바로 얹는다. 윗면 z 316.85, 옆 슬롯 중심 z 306.85."""
+    m = MODULE_RAIL
+    z = UPPER_Z + S / 2 + m["series"] / 2
+    out = []
+    for i, y in enumerate(m["ys"]):
+        b = tslot.bar(m["series"], m["length"], (m["x0"], y, z), "X")
+        b.label = f"모듈레일_2020_{['오른', '가운데', '왼'][i]}"
+        out.append(b)
+    return out
+
+
+def sensor_module_groups():
+    """v27: 센서 모듈 그룹 — 레일 윗면 z = UPPER_Z + 15 + 20."""
+    g, scan_z = SM.build(UPPER_Z + S / 2 + MODULE_RAIL["series"])
+    LIDAR["scan_z"] = scan_z
+    return [dict(key="module_plate", label="센서모듈_밑판_기둥", color="#b8bec5", parts=g["module_plate"]),
+            dict(key="lidar", label="라이다_STL-19P", color="#1f2124", parts=g["lidar"]),
+            dict(key="gnss", label="GNSS_GPS630", color="#26292d", parts=g["gnss"]),
+            dict(key="status_light", label="상태표시등_ST45ML_3단", color="#c8ccd0", parts=g["status_light"])]
+
+
+def frame_brackets():
+    """v26: 기둥 ↔ 상부 사이드 레일 코너 브래킷 — 기둥의 x 면 (끝 기둥은 안쪽 한 면, 가운데 기둥은 양면), 레일 밑."""
+    b = BRACKET
+    zt = UPPER_Z - S / 2                                  # 상부 레일 밑면
+    out = []
+    i = 0
+    for px in POST_X:
+        sides = (-1, 1) if px == 0 else ((-1,) if px > 0 else (1,))
+        for sy in (-1, 1):
+            for sx in sides:
+                x_face = px + sx * S / 2
+                leg_v = Pos(x_face + sx * b["t"] / 2, sy * RAIL_Y, zt - b["leg"] / 2) * Box(b["t"], b["w"], b["leg"])
+                leg_h = Pos(x_face + sx * b["leg"] / 2, sy * RAIL_Y, zt - b["t"] / 2) * Box(b["leg"], b["w"], b["t"])
+                gus = (Pos(x_face + sx * b["leg"] * 0.35, sy * RAIL_Y, zt - b["leg"] * 0.35)
+                       * Rot(0, sx * 45, 0) * Box(b["leg"] * 0.9, 3.0, 3.0))
+                br = leg_v + leg_h + gus
+                i += 1
+                br.label = f"코너브래킷_3030_{i}"
+                out.append(br)
+    return out
+
+
+def post_bolts():
+    """기둥 볼트 — M8 렌치볼트 머리가 상부 레일 윗면에 앉는다 (나중 상부판은 이 자리에 머리 구멍)."""
+    b = POST_BOLT
+    top = UPPER_Z + S / 2
+    out = []
+    for i, (x, sy) in enumerate((x, sy) for x in POST_X for sy in (-1, 1)):
+        h = Pos(x, sy * RAIL_Y, top) * Cylinder(b["head_d"] / 2, b["head_h"], align=(Align.CENTER, Align.CENTER, Align.MIN))
+        h.label = f"기둥볼트_M8_{i+1}"
+        out.append(h)
+    return out
+
+
+def wheels():
+    """휠모터·T 클램프·상부 클램프·볼트 (레일 밑면 2 + 혀 → 축크로스 2, 바퀴당)."""
+    motor0 = actual_motor_step_reference(axle_z=0)
+    upper0 = LC.oem_clamp_block()
+    # 혀 케이블 통로는 전부 차량 안쪽(x=0 쪽)으로 — 좌우 두 벌
+    lowers_by_side = {s: LC.low_clamp(cable_side=s) for s in (+1, -1)}
+    bolt0 = (LC.bottom_button_head_bolts_reference()
+             + LC.shelf_button_head_bolts_reference())
+
+    motors, lowers, uppers, bolts = [], [], [], []
+    for i, (x, sy) in enumerate((x, sy) for x in (-AXLE_X, AXLE_X) for sy in (-1, 1)):
+        # 기본 형상은 +Y 차륜 기준(축이 -Y = 차량 안쪽). -Y 측은 z 축 180° 회전.
+        tf = Pos(x, sy * WHEEL_Y, AXLE_Z) * (Rot(0, 0, 180) if sy < 0 else Location())
+        w = tf * motor0.moved(Location())
+        lo = tf * lowers_by_side[LC.cable_side_for(x, sy)].moved(Location())
+        up = tf * upper0.moved(Location())
+        w.label, lo.label, up.label = f"휠모터{i+1}", f"T클램프{i+1}", f"상부클램프{i+1}"
+        motors.append(w); lowers.append(lo); uppers.append(up)
+        for j, b0 in enumerate(bolt0):
+            b = tf * b0.moved(Location())
+            b.label = f"볼트_{i+1}_{j+1}"
+            bolts.append(b)
+    return motors, lowers, uppers, bolts
+
+
+def build():
+    return build_env() + wiring_groups()                      # v29: 배선은 따로 (router.py 가 build_env 만 쓴다)
+
+
+def build_env():
+    frame = lower_frame() + posts() + upper_frame()          # v23: 상부 프레임
+    motors, lowers, uppers, bolts = wheels()
+    return [
+        dict(key="frame", label=f"프레임_3030_{len(frame)}본", color="#69727d", parts=frame),
+        dict(key="clamp_low", label="T클램프_혀선반_4개", color="#c9ced4", parts=lowers),
+        dict(key="clamp_oem", label="기존_상부클램프_4개", color="#f5a623", parts=uppers),
+        dict(key="motor", label="휠모터_4개", color="#34383d", parts=motors),
+        dict(key="bolt", label=f"체결볼트_M{P.TNUT_BOLT:.0f}x{P.LOW_BOLT_LEN:.0f}_{len(bolts)}개",
+             color="#30343a", parts=bolts),
+        dict(key="frame_bracket", label="코너브래킷_3030_8", color="#8a9099", parts=frame_brackets()),   # v26 (기둥 볼트 대신)
+        dict(key="module_rail", label="모듈레일_2020_3본", color="#7d8590", parts=module_rails()),       # v26
+    ] + sensor_module_groups() + [
+    ] + floor_groups()
+
+
+WIRES = []                                         # v28: 전선 목록 (metrics · BOM 이 읽는다)
+
+
+def wiring_groups():
+    """v28: 배선 — 배전 부품 + 전선 + 하네스 간선. 그룹 key 는 wiring.GROUPS."""
+    fl = FL.Floor(sys.modules[__name__])
+    g, L = WR.build(fl.z0 + FL.PLATE_T)
+    WIRES[:] = L
+    return [dict(key=k, label=WR.GROUPS[k][0], color=WR.GROUPS[k][1], parts=v) for k, v in g.items() if v]
+
+
+def floor_groups():
+    fl = FL.Floor(sys.modules[__name__])
+    pb = fl.bolts()
+    L, _, _ = fl.bolt_len()
+    return [
+        dict(key="floor", label=f"바닥판_{FL.MAT_NAME.split()[0]}{FL.PLATE_T:g}t_불투명", color="#3f444a",
+             parts=[fl.plate()]),
+        dict(key="floor_bolt", label=f"판볼트_M6x{L}_{len(pb)}개", color="#30343a", parts=pb),
+        dict(key="cable", label="케이블_경로_참고", color="#c62828", parts=fl.cable_paths()),
+    ] + part_groups(fl) + shell_groups()
+
+
+def shell_groups():
+    sh = SH.Shell(sys.modules[__name__])
+    pan = sh.panels()
+    acm = [p for p in pan if "ACM" in p.label]
+    pc = [p for p in pan if "PC" in p.label]
+    return [
+        dict(key="shell_acm", label="외관_ACM3t_옆판2", color="#dfe3e6", parts=acm),
+        dict(key="shell_pc", label="외관_UV_PC3t_앞뒤판_불투명", color="#4a4f55", parts=pc),
+        dict(key="shell_asa", label="외관_ASA_루버_차양_포트칸", color="#3b4046", parts=sh.printed()),
+        dict(key="shell_rubber", label="고무범퍼띠_앞뒤", color="#141414", parts=sh.rubber_bumpers()),
+        dict(key="camera", label="뎁스카메라_Gemini336_2", color="#2b2f35", parts=sh.cameras()),
+        dict(key="estop", label="비상정지_Autonics_SF2ER", color="#c62828", parts=[sh.estop()]),
+        dict(key="estop_legend", label="비상정지명판_노랑", color="#f2c200", parts=[sh.estop_legend()]),
+        dict(key="estop_body", label="비상정지본체_패널뒤", color="#3a3d42", parts=[sh.estop_body()]),
+        dict(key="fan", label="배기팬_2_가드", color="#6d747b", parts=sh.fans()),
+        dict(key="bay_ports", label="포트칸_부품_7", color="#c9a227", parts=sh.bay_ports()),
+        dict(key="headlight", label="전조등_MR16_2", color="#e8e4d8", parts=sh.headlights()),
+        dict(key="antenna", label="눈썹안테나_와이파이_2", color="#1d1f22", parts=sh.antennas()),   # v23
+        dict(key="shell_lid", label="상부덮개_ACM3t", color="#d4d8db", parts=sh.lid()),               # v25 -> v26 두 장
+        dict(key="lid_knob", label="덮개손나사_M5_6", color="#1d1f22", parts=sh.lid_knobs()),
+    ]
+
+
+def part_groups(fl):
+    """parts.PARTS → 그룹별 부품 (실측 치수 모델). 밑면 = 판 윗면."""
+    by = PT.build(fl.z0 + FL.PLATE_T)
+    return [dict(key=f"part_{k}", label=PT.GROUPS[k][0], color=PT.GROUPS[k][1], parts=v)
+            for k, v in by.items()]
+
+
+# ---------------------------------------------------------------- 검증
+_BB = {}
+
+
+def _bb(part):
+    """부품 바운딩박스 (min, max) — **한 번만** 잰다. 빠른 박스라 실제보다 조금 크다 (걸러내기용)."""
+    k = id(part)
+    if k not in _BB:
+        b = part.bounding_box(optimal=False)
+        _BB[k] = (part, np.array(tuple(b.min)), np.array(tuple(b.max)))
+    return _BB[k][1], _BB[k][2]
+
+
+def _overlap(a_parts, b_parts):
+    """두 무리 사이 (겹침 부피 합 mm³, 겹친 조각의 가장 얇은 치수 최댓값)."""
+    total, thick = 0.0, 0.0
+    for a in a_parts:
+        alo, ahi = _bb(a)
+        for b in b_parts:
+            blo, bhi = _bb(b)
+            if (alo > bhi).any() or (blo > ahi).any():
+                continue
+            inter = a & b
+            if inter and inter.volume > 0:
+                total += inter.volume
+                s = inter.bounding_box().size
+                thick = max(thick, min(s.X, s.Y, s.Z))
+    return total, thick
+
+
+_MESH = []
+
+
+def _trsf(loc):
+    t = loc.wrapped.Transformation()
+    m = np.array([[t.Value(i, j) for j in range(1, 5)] for i in range(1, 4)])
+    return m[:, :3], m[:, 3]
+
+
+def _mesh_pts(shape, tol=0.5):
+    """메시 꼭짓점 (월드). 같은 형상을 옮긴 사본은 원본 메시에 상대 행렬만 곱한다.
+
+    located() 는 깊은 복사라 (모터 STEP 이면 수 초) 쓰지 않는다 — 원본을
+    제자리에서 쪼개고, 사본은 (사본 Location × 원본 Location⁻¹) 로 옮긴다."""
+    for base, pts, (R0, T0) in _MESH:
+        if shape.wrapped.IsPartner(base.wrapped):
+            R1, T1 = _trsf(shape.location)
+            R = R1 @ R0.T
+            return pts @ R.T + (T1 - R @ T0)
+    vs, _ = shape.tessellate(tol, 0.3)
+    pts = np.array([(v.X, v.Y, v.Z) for v in vs])
+    _MESH.append((shape, pts, _trsf(shape.location)))
+    return pts
+
+
+def _box_gap(box_part, shape):
+    """축 정렬 상자 부품 ~ shape 메시 꼭짓점 사이 최소 거리 (mm, 메시 오차 ±0.5)."""
+    bb = box_part.bounding_box()
+    p = _mesh_pts(shape)
+    lo, hi = np.array(tuple(bb.min)), np.array(tuple(bb.max))
+    d = np.maximum(np.maximum(lo - p, 0), p - hi)
+    return float(np.linalg.norm(d, axis=1).min())
+
+
+def verify(groups):
+    g = {d["key"]: d["parts"] for d in groups}
+    frame, lowers, uppers, motors, bolts = (g["frame"], g["clamp_low"], g["clamp_oem"],
+                                            g["motor"], g["bolt"])
+    pairs = {
+        "프레임-T클램프": (frame, lowers),
+        "프레임-상부클램프": (frame, uppers),
+        "프레임-휠모터": (frame, motors),
+        "T클램프-휠모터": (lowers, motors),
+        "T클램프-상부클램프": (lowers, uppers),
+        "볼트-프레임": (bolts, frame),       # 슬롯 입구로 들어가야 한다 — 립을 뚫으면 안 된다
+        "볼트-T클램프": (bolts, lowers),
+        "볼트-휠모터": (bolts, motors),
+    }
+    # 볼트 머리는 카운터보어 바닥과 0.01mm 겹친다 — low_clamp 가 면 겹침을 피하려고
+    # 카운터보어를 0.01 덜 파 둔 값이다. 부피(개당 0.52)가 아니라 **두께**로 거른다.
+    TOL_T = 0.02
+    bad = []
+    for name, (a, b) in pairs.items():
+        v, t = _overlap(a, b)
+        print(f"  간섭 {name}: {v:.2f} mm3" + (f" (두께 {t:.3f})" if v > 0 else ""))
+        if v > 1.0 and t > TOL_T:
+            bad.append(name)
+    # 대조군 — 1mm 올리면 겹쳐야 한다. 안 겹치면 클램프가 떠 있는 것이다.
+    raised = [Pos(0, 0, 1.0) * lo for lo in lowers]
+    for name, prefix in (("레일", "하부사이드"), ("축크로스", "축크로스")):
+        v, _ = _overlap([b for b in frame if b.label.startswith(prefix)], raised)
+        print(f"  대조군 클램프 +1mm 올림 → {name} 겹침 {v:.0f} mm3")
+        if v < 100.0:
+            bad.append(f"대조군: 클램프가 {name}에 안 닿는다")
+    # 기둥 — 1mm 내리면 레일과 겹쳐야 한다 (= 레일 윗면에 서 있다).
+    post = [b for b in frame if b.label.startswith("기둥")]
+    rails = [b for b in frame if b.label.startswith("하부사이드")]
+    v, _ = _overlap(rails, [Pos(0, 0, -1.0) * p for p in post])
+    print(f"  대조군 기둥 -1mm 내림 → 레일 겹침 {v:.0f} mm3")
+    if v < 100.0 * len(post):
+        bad.append("대조군: 기둥이 레일 윗면에 안 선다")
+    # v23 — 상부 프레임: 옆 레일이 기둥 윗면에 얹힌다 (1mm 내리면 겹친다), 크로스는 레일 사이에 끼고 서로 안 겹친다
+    up_rails = [b for b in frame if b.label.startswith("상부사이드")]
+    up_cross = [b for b in frame if b.label.startswith("상부크로스")]
+    v, _ = _overlap(post, [Pos(0, 0, -1.0) * r for r in up_rails])
+    print(f"  대조군 상부 레일 -1mm 내림 → 기둥 겹침 {v:.0f} mm3")
+    if v < 100.0 * len(post):
+        bad.append("대조군: 상부 레일이 기둥 위에 안 얹힌다")
+    v, _ = _overlap(up_rails, up_cross)
+    print(f"  간섭 상부 레일-상부 크로스: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("상부 레일-크로스 겹침")
+    v, _ = _overlap(up_rails + up_cross, post + [b for b in frame if b.label.startswith(("하부", "축크로스"))])
+    print(f"  간섭 상부 프레임-기둥 · 하부: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("상부 프레임이 기둥 · 하부와 겹침")
+    gap = min(_box_gap(p, m) for p in post for m in motors)
+    print(f"  기둥 ~ 휠모터 최소 간격 {gap:.1f} mm (메시 점 기준)")
+    if gap < 5.0:
+        bad.append(f"기둥이 타이어에 {gap:.1f} mm 까지 붙는다")
+    return bad + verify_floor(g) + verify_parts(g) + verify_holes() + verify_shell(g) + verify_rear(g) + verify_wiring(g)
+
+
+def verify_rear(g):
+    """v14 — 카메라 · 비상정지 · 팬 · 포트 칸 · 고무 범퍼가 서로 · 프레임 · 부품 · 판과 안 겹친다."""
+    parts = [p for k, v in g.items() if k.startswith("part_") for p in v]
+    new = g["camera"] + g["estop"] + g["estop_legend"] + g["estop_body"] + g["fan"] + g["shell_rubber"] + g["bay_ports"]         + g["headlight"] + g["antenna"]
+    asa = g["shell_asa"]
+    panels = g["shell_acm"] + g["shell_pc"]
+    bad = []
+    for name, (a, b) in {"추가물-프레임": (new, g["frame"]), "추가물-부품": (new, parts),
+                         "추가물-외관판": (new, panels), "추가물-ASA": (new, asa),
+                         "추가물끼리": (g["camera"], g["estop"] + g["fan"]),
+                         "포트-팬 · 비상정지": (g["bay_ports"], g["fan"] + g["estop"] + g["estop_body"]),
+                         "비상정지-팬": (g["estop"] + g["estop_body"], g["fan"]), "명판-팬": (g["estop_legend"], g["fan"]),
+                         "추가물-휠모터": (new, g["motor"])}.items():
+        v, t = _overlap(a, b)
+        print(f"  간섭 {name}: {v:.2f} mm3" + (f" (두께 {t:.3f})" if v > 0 else ""))
+        if v > 1.0:
+            bad.append(name)
+    # v22 — 전조등: 램프가 테두리 립에 앉아 있다 (대조군: 0.5 앞으로 밀면 겹친다), 카메라 · 플러그와 떨어져 있다
+    hl = g["headlight"]
+    hous = [p for p in asa if p.label.startswith("전조등")]
+    v_ctrl, _ = _overlap([Pos(0.5, 0, 0) * p for p in hl], hous)
+    print(f"  대조군 전조등 +0.5 mm 앞으로 → 테두리 겹침 {v_ctrl:.1f} mm3")
+    if v_ctrl < 1.0:
+        bad.append("대조군: 램프가 테두리 립에 안 닿는다")
+    v, _ = _overlap(hl + hous, g["camera"])
+    print(f"  간섭 전조등-카메라: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("전조등-카메라")
+    top = max(p.bounding_box().max.Z for p in hl + hous)
+    print(f"  전조등 윗끝 z={top:.1f} ~ 상부 프레임 밑면 {SH.Shell(sys.modules[__name__]).z_post:.1f}")
+    # v23 — 눈썹 안테나: 전조등 · 카메라와 안 겹치고, 판 위끝 · 옆 끝 안, 안쪽 너트가 상부 끝 크로스 밑
+    an = g["antenna"]
+    v, _ = _overlap(an, hl + hous + g["camera"])
+    print(f"  간섭 안테나-전조등 · 카메라: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("안테나가 전조등 · 카메라에 닿는다")
+    sh_ = SH.Shell(sys.modules[__name__])
+    a_top = max(p.bounding_box().max.Z for p in an)
+    a_y = max(abs(p.bounding_box().min.Y) for p in an) if an else 0
+    a_y = max(a_y, max(abs(p.bounding_box().max.Y) for p in an))
+    print(f"  안테나 윗끝 z={a_top:.1f} (판 위끝 {sh_.z1:.2f}) · 옆 끝 |y|={a_y:.1f} (판 끝 {sh_.y_out:.1f})")
+    if a_top > sh_.z1 or a_y > sh_.y_out:
+        bad.append("안테나가 앞판 밖으로 삐져나간다 (위 · 옆)")
+    # v24 — 앞 카메라를 내렸다: 카메라 · 브래킷이 보드 · 바닥판 · 바닥 볼트와 안 닿고, 창이 전조등 테두리 아래, 바닥이 보이는 거리
+    import math
+    fcam = [c for c in g["camera"] if c.bounding_box().center().X > 0]
+    fbr = [p for p in asa if p.label.startswith("카메라브래킷_앞")]
+    others = [p for k, v in g.items() if k.startswith("part_") for p in v] + g["floor"] + g["floor_bolt"]
+    v, _ = _overlap(fcam + fbr, others)
+    print(f"  간섭 앞 카메라 · 브래킷-부품 · 바닥판: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("앞 카메라 · 브래킷이 부품 · 바닥판에 닿는다")
+    gap_b = min(p.bounding_box().min.Z for p in fcam + fbr) - (FL.Floor(sys.modules[__name__]).z0 + FL.PLATE_T)
+    drv_top = max(p.bounding_box().max.Z for p in g["part_driver"])
+    plug_bot = min(c.bounding_box().min.Z for c in fcam)
+    zc = SH.CAM["z_front"]
+    win_top = zc + SH.CM.WINDOW[1] / 2
+    bezel_bot = min(hz for _, hz in SH.HEADLIGHTS) - SH.HL.BEZEL["h"] / 2
+    print(f"  앞 카메라 z={zc:.0f}: 창 위끝 {win_top:.1f} ~ 전조등 테두리 아래끝 {bezel_bot:.1f} ({bezel_bot - win_top:.1f}), "
+          f"카메라 · 브래킷 아래끝 ~ 바닥판 {gap_b:.1f}, 카메라 아래끝 {plug_bot:.1f} ~ 보드 윗면 {drv_top:.1f}")
+    if win_top > bezel_bot:
+        bad.append("앞 카메라 창이 전조등 테두리에 걸린다")
+    half_v = 65.0 / 2                                           # Gemini 336 깊이 세로 시야 65°
+    print(f"  바닥이 보이기 시작하는 거리: 앞 {zc / math.tan(math.radians(half_v)):.0f} mm · 뒤 {SH.CAM['z'] / math.tan(math.radians(half_v)):.0f} mm")
+    # v25 — 상부 덮개: 프레임 위에 얹힘 (1 mm 내리면 겹친다), 다른 어떤 것과도 안 겹친다, 기둥 볼트 머리는 구멍으로 빠진다
+    lid = g["shell_lid"]
+    v, _ = _overlap([Pos(0, 0, -1.0) * p for p in lid], g["frame"])
+    print(f"  대조군 덮개 -1mm 내림 → 프레임 겹침 {v:.0f} mm3")
+    if v < 1000.0:
+        bad.append("대조군: 덮개가 프레임 위에 안 얹힌다")
+    rest = [p for k, v_ in g.items() if k not in ("shell_lid", "lid_knob") for p in v_]
+    v, _ = _overlap(lid, rest)
+    print(f"  간섭 덮개-나머지 전부 (기둥 볼트 머리 포함): {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("덮개가 무언가와 겹친다")
+    top = max(p.bounding_box().max.Z for p in g["lid_knob"])
+    print(f"  덮개 손나사 윗끝 z={top:.1f} (덮개 윗면 {SH.Shell(sys.modules[__name__]).z1 + SH.ACM_T:.2f}, 레일 윗면 {UPPER_Z + S / 2 + 20:.2f})")
+    # v26 — 모듈 레일: 프레임 위에 얹힘 (1 mm 내리면 겹친다), 프레임 말고는 아무것과도 안 겹친다
+    mr = g["module_rail"]
+    v, _ = _overlap([Pos(0, 0, -1.0) * p for p in mr], g["frame"])
+    print(f"  대조군 모듈 레일 -1mm 내림 -> 프레임 겹침 {v:.0f} mm3")
+    if v < 300.0 * len(mr):
+        bad.append("대조군: 모듈 레일이 프레임 위에 안 얹힌다")
+    rest = [p for k, v_ in g.items() if k not in ("module_rail",) for p in v_]
+    v, _ = _overlap(mr, rest)
+    print(f"  간섭 모듈 레일-나머지 전부 (덮개 포함): {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("모듈 레일이 무언가와 겹친다")
+    # v26 — 코너 브래킷: 상부 레일 밑에 붙고 (0.5 올리면 겹친다) 다른 것과 안 겹친다
+    fb = g["frame_bracket"]
+    rest = [p for k, v_ in g.items() if k not in ("frame_bracket",) for p in v_]
+    v, _ = _overlap(fb, rest)
+    print(f"  간섭 코너 브래킷-나머지 전부: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("코너 브래킷이 무언가와 겹친다")
+    v, _ = _overlap([Pos(0, 0, 0.5) * p for p in fb], g["frame"])
+    print(f"  대조군 브래킷 +0.5mm 올림 -> 상부 레일 겹침 {v:.0f} mm3")
+    if v < 50.0 * len(fb):
+        bad.append("대조군: 브래킷이 상부 레일 밑에 안 붙는다")
+    # v27 — 센서 모듈: 밑판이 레일 위에 얹힘, 모듈 ↔ 나머지 겹침 0, 라이다 스캔 평면 위로 아무것도 없다 (자기 자신 빼고)
+    mod = g["module_plate"] + g["lidar"] + g["gnss"] + g["status_light"]
+    v, _ = _overlap([Pos(0, 0, -1.0) * g["module_plate"][0]], g["module_rail"])
+    print(f"  대조군 센서 모듈 밑판 -1mm 내림 -> 레일 겹침 {v:.0f} mm3")
+    if v < 300.0:
+        bad.append("대조군: 모듈 밑판이 레일 위에 안 얹힌다")
+    rest = [p for k, v_ in g.items() if k not in ("module_plate", "lidar", "gnss", "status_light") + WIRING_KEYS for p in v_]
+    v, _ = _overlap(mod, rest)
+    print(f"  간섭 센서 모듈-나머지 전부 (배선은 verify_wiring 에서): {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("센서 모듈이 무언가와 겹친다")
+    sz = LIDAR["scan_z"]
+    others_top = max(p.bounding_box().max.Z for k, v_ in g.items() if k != "lidar" for p in v_)
+    st_top = max(p.bounding_box().max.Z for p in g["status_light"])
+    print(f"  라이다 스캔 평면 z={sz:.1f} — 그 밖의 가장 높은 것 z={others_top:.1f} (표시등 꼭대기 {st_top:.1f}), 여유 {sz - others_top:.1f}")
+    if others_top > sz - 3.0:
+        bad.append("라이다 스캔 평면을 무언가가 가린다")
+    pp = g["bay_ports"]                                        # v21: 포트 부품끼리 (모든 쌍)
+    v_pp = sum(_overlap([a], pp[i + 1:])[0] for i, a in enumerate(pp[:-1]))
+    print(f"  간섭 포트 부품끼리 ({len(pp)} 개): {v_pp:.2f} mm3")
+    if v_pp > 1.0:
+        bad.append("포트 부품끼리 겹침")
+    sh = SH.Shell(sys.modules[__name__])
+    b = SH.BAY
+    print(f"  포트 칸 z {b['z'] - b['h'] / 2:.1f}~{b['z'] + b['h'] / 2:.1f} — 뒤 드라이버 윗면 "
+          f"{max(p.bounding_box().max.Z for p in g['part_driver']):.1f}, 상부 프레임 밑면 {sh.z_post:.1f}")
+    import math
+    ey, ez = SH.ESTOP["y"], SH.ESTOP["z"]
+    for fy, fz in SH.FANS:                                     # 노란 명판 (Ø60) 이 팬 구멍 (Ø76) 을 가리나
+        gap = math.dist((ey, ez), (fy, fz)) - (SH.ES.LEGEND_D / 2 + SH.FAN["d"] / 2)
+        if gap < 50:
+            print(f"  명판 Ø{SH.ES.LEGEND_D:g} ~ 팬 구멍 Ø{SH.FAN['d']:g} 간격 {gap:.1f} mm")
+        if gap < 1.0:
+            bad.append(f"비상정지 명판이 팬 구멍을 가린다 ({gap:.1f} mm)")
+    es_top = max(p.bounding_box().max.Z for p in g["estop"] + g["estop_body"])
+    print(f"  비상정지 윗끝 z={es_top:.2f} ~ 상부 프레임 밑면 {sh.z_post:.2f}: {sh.z_post - es_top:.2f} mm")
+    if es_top > sh.z_post - 1.0:
+        bad.append("비상정지가 상부 프레임 자리에 닿는다")
+    cam_top = max(p.bounding_box().max.Z for p in g["camera"])
+    print(f"  카메라 윗면 z={cam_top:.2f} ~ 상부 프레임 밑면 {sh.z_post:.2f}: {sh.z_post - cam_top:.2f} mm")
+    if cam_top > sh.z_post - 1.0:
+        bad.append("카메라가 상부 프레임 자리에 닿는다")
+    # 카메라 렌즈면이 판 바깥면과 같은가
+    for c in g["camera"]:
+        bb = c.bounding_box()
+        face = bb.max.X if bb.center().X > 0 else -bb.min.X
+        if abs(face - sh.x_out) > 0.3:
+            bad.append(f"{c.label} 렌즈면 {face:.2f} ≠ 판 바깥면 {sh.x_out:.2f}")
+    print(f"  카메라 렌즈면 = 판 바깥면 x=±{sh.x_out:.1f}")
+    # v19 — 카메라 브래킷이 포트 칸 트레이 · 덮개와 안 겹치고, 판 볼트 머리가 포트 칸 바깥 테두리 위에 온다
+    brs = [p for p in asa if p.label.startswith("카메라브래킷")]
+    bay = [p for p in asa if not p.label.startswith("카메라브래킷")]
+    v, t = _overlap(brs, bay)
+    print(f"  간섭 카메라브래킷-포트칸: {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("카메라 브래킷이 포트 칸에 걸린다")
+    head_bot = SH.CAM["z"] + SH.CM.HOLE_DZ - 5.5 / 2
+    rim_top = b["z"] + b["h"] / 2 + b["flange"]
+    print(f"  판 M3 볼트 머리 아래끝 z={head_bot:.2f} ~ 포트 칸 바깥 테두리 윗끝 {rim_top:.2f}: {head_bot - rim_top:.2f} mm")
+    if head_bot < rim_top + 0.3:
+        bad.append("카메라 브래킷 볼트 머리가 포트 칸 테두리에 걸린다")
+    fl_bot = SH.CAM["z"] + SH.CM.FLANGE_Z0
+    print(f"  브래킷 플랜지 아래끝 z={fl_bot:.2f} ~ 포트 칸 윗면 {b['z'] + b['h'] / 2:.2f}")
+    return bad
+
+
+def verify_shell(g):
+    """외관 — 프레임 · 부품 · 바퀴와 간섭 0, 타이어와 간격, 윗판이 기둥 위에 얹힘."""
+    sh = SH.Shell(sys.modules[__name__])
+    panels = g["shell_acm"] + g["shell_pc"]
+    printed = g["shell_asa"]
+    parts = [p for k, v in g.items() if k.startswith("part_") for p in v]
+    bad = []
+    for name, (a, b) in {"외관판-프레임": (panels, g["frame"]), "외관판-T클램프": (panels, g["clamp_low"]),
+                         "외관판-휠모터": (panels, g["motor"]), "외관판-부품": (panels, parts),
+                         "외관판-바닥판": (panels, g["floor"]), "출력물-프레임": (printed, g["frame"]),
+                         "출력물-휠모터": (printed, g["motor"]), "출력물-T클램프": (printed, g["clamp_low"]),
+                         "출력물-외관판": (printed, panels)}.items():
+        v, t = _overlap(a, b)
+        print(f"  간섭 {name}: {v:.2f} mm3" + (f" (두께 {t:.3f})" if v > 0 else ""))
+        if v > 1.0:
+            bad.append(name)
+    sides = [p for p in panels if p.label.startswith("옆판")]
+    gap = min(_box_gap(p, m) for p in sides for m in g["motor"])
+    print(f"  옆판 ~ 타이어 최소 간격 {gap:.1f} mm (메시 점 기준)")
+    if gap < 5.0:
+        bad.append(f"옆판이 타이어에 {gap:.1f} mm")
+    if any(p.label.startswith("윗판") for p in panels):
+        bad.append("윗판이 있다 (v11 에서 뺐다)")
+    walls = [p for p in panels]
+    hi = min(p.bounding_box().max.Z for p in walls)
+    print(f"  벽 위끝 z={hi:.2f} (상부 프레임 윗면 가정 z={sh.z1:.2f})")
+    if abs(hi - sh.z1) > 0.05:
+        bad.append(f"벽 위끝 {hi:.2f} ≠ 상부 프레임 윗면 {sh.z1:.2f}")
+    top = max(p.bounding_box().max.Z for p in parts)
+    print(f"  부품 윗면 z={top:.1f} ~ 상부 프레임 밑면 z={sh.z_post:.1f}: {sh.z_post - top:.1f} mm")
+    return bad
+
+
+def verify_holes():
+    """부품 고정 구멍 — (1) 판 밑에 빔이 없어야 너트가 들어간다 (2) 다른 구멍 · 노치 · 가장자리와 안 겹친다."""
+    import math
+    fl = FL.Floor(sys.modules[__name__])
+    xs, ys = fl.beam_bands()
+    NUT_R = {2.7: 4.0, 3.4: 5.0, 3.5: 5.0, 4.5: 6.5, 5.5: 7.5}       # 너트 · 와셔 반경 (구멍 Ø → mm)
+    bad, over = [], 0
+    for x, y, d, bolt, name in fl.part_holes():
+        r = NUT_R.get(d, d)
+        if any(a - r < x < b + r for a, b in xs) or any(a - r < y < b + r for a, b in ys):
+            bad.append(f"빔 위 구멍: {name} ({x:+.1f},{y:+.1f})")
+            over += 1
+    others = ([(x, y, FL.MOUNT_D) for x, y in fl.mount_holes()]
+              + [(x, y, FL.GROMMET_D) for x, y in fl.grommets])
+
+    def slot_gap(x, y, d):
+        """구멍 가장자리 ~ 밴드 슬롯 (x 방향 장공) 가장자리 최소 거리. 원으로 뭉개면 과하게 걸린다."""
+        out = 1e9
+        for sx, sy, l, w in fl.slots():
+            h = (l - w) / 2
+            px = min(max(x, sx - h), sx + h)
+            out = min(out, math.dist((x, y), (px, sy)) - w / 2 - d / 2)
+        return out
+    ph = [(x, y, d) for x, y, d, _, _ in fl.part_holes()]
+    close = 0
+    for i, (x, y, d) in enumerate(ph):
+        for (u, v, e) in ph[i + 1:] + others:
+            if math.dist((x, y), (u, v)) < (d + e) / 2 + 2.0:
+                close += 1
+                bad.append(f"구멍끼리 2 mm 안: ({x:+.1f},{y:+.1f}) ~ ({u:+.1f},{v:+.1f})")
+        if slot_gap(x, y, d) < 2.0:
+            close += 1
+            bad.append(f"밴드 슬롯에 2 mm 안: ({x:+.1f},{y:+.1f})")
+        if abs(x) + d / 2 > fl.L / 2 - 3 or abs(y) + d / 2 > fl.W / 2 - 3:
+            bad.append(f"가장자리 3 mm 안: ({x:+.1f},{y:+.1f})")
+        for cx, cy, wx, wy in fl.notches():
+            if abs(x - cx) < wx / 2 + d / 2 + 2 and abs(y - cy) < wy / 2 + d / 2 + 2:
+                bad.append(f"노치에 붙음: ({x:+.1f},{y:+.1f})")
+    print(f"  부품 고정 구멍 {len(ph)} — 빔 위 {over} · 서로/다른 구멍과 2 mm 안 {close}")
+    # 대조군 — 일부러 가운데 크로스 위 (x=0) 에 둔 구멍은 걸려야 한다
+    a, b = xs[2]
+    print(f"  대조군 x=0 구멍 → 빔 위 판정 {a - 5 < 0 < b + 5}")
+    return bad
+
+
+def verify_floor(g):
+    """바닥판 — 간섭 · 얹힘 · 볼트 · 케이블 길."""
+    plate, pbolts, cables = g["floor"][0], g["floor_bolt"], g["cable"]
+    frame, lowers, uppers, motors = g["frame"], g["clamp_low"], g["clamp_oem"], g["motor"]
+    bad = []
+    for name, (a, b) in {"바닥판-프레임 (기둥 포함)": ([plate], frame),
+                         "바닥판-T클램프": ([plate], lowers), "바닥판-휠모터": ([plate], motors),
+                         "판볼트-프레임": (pbolts, frame), "판볼트-바닥판": (pbolts, [plate]),
+                         "케이블-프레임": (cables, frame), "케이블-T클램프": (cables, lowers),
+                         "케이블-상부클램프": (cables, uppers), "케이블-휠모터": (cables, motors),
+                         "케이블-바닥판": (cables, [plate])}.items():
+        v, t = _overlap(a, b)
+        print(f"  간섭 {name}: {v:.2f} mm3" + (f" (두께 {t:.3f})" if v > 0 else ""))
+        if v > 1.0:
+            bad.append(name)
+    # 대조군 — 0.5 mm 내리면 레일 · 크로스와 겹친다 (= 얹혀 있다). 판볼트를 1 mm 내리면 판과 겹친다.
+    v, _ = _overlap([Pos(0, 0, -0.5) * plate], frame)
+    print(f"  대조군 바닥판 -0.5mm → 프레임 겹침 {v:.0f} mm3")
+    if v < 100.0:
+        bad.append("대조군: 바닥판이 프레임에 안 얹힌다")
+    # 10 본 겸용 — 축 자리 (±210) 에 가상 기둥 4 본을 세워도 판과 안 겹쳐야 한다.
+    extra = [_bar(f"가상기둥{i+1}", POST_H, (x, sy * RAIL_Y, FRAME_TOP), "Z")
+             for i, (x, sy) in enumerate((x, sy) for x in (-AXLE_CROSS_X, AXLE_CROSS_X)
+                                         for sy in (-1, 1))]
+    v, _ = _overlap([plate], extra)
+    print(f"  10 본 겸용: 축 자리 가상 기둥 4 본 ~ 바닥판 간섭 {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("10 본 겸용 실패: 축 자리 기둥이 판과 겹친다")
+    # 대조군 — 노치가 없다면 같은 가상 기둥이 판과 겹쳐야 한다 (검사가 실제로 보는지)
+    with_notch_gone = [Pos(0, 0, 0) * b for b in extra]
+    solid = Pos(0, 0, FRAME_TOP) * Box(BASE_L, BASE_W, FL.PLATE_T, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    v, _ = _overlap([solid], with_notch_gone)
+    print(f"  대조군 노치 없는 판 ~ 가상 기둥 겹침 {v:.0f} mm3")
+    if v < 100.0:
+        bad.append("대조군: 가상 기둥 검사가 판을 못 본다")
+    fl = FL.Floor(sys.modules[__name__])
+    L, need, maxlen = fl.bolt_len()
+    print(f"  판볼트 길이: 필요 {need:.1f} ~ 최대 {maxlen:.1f} → M6x{L}")
+    if L is None:
+        bad.append(f"판볼트 길이 맞는 것 없음 ({need:.1f}~{maxlen:.1f})")
+    return bad
+
+
+def metrics(groups):
+    g = {d["key"]: d["parts"] for d in groups}
+    lengths = [(b.label, max(tuple(b.bounding_box().size))) for b in g["frame"]]  # 가장 긴 변
+    total = sum(l for _, l in lengths)
+    billed = sum(tslot.snap_cut(l) for _, l in lengths)
+    cuts = {}
+    for _, l in lengths:
+        cuts[round(l)] = cuts.get(round(l), 0) + 1
+    return [
+        ("프레임 외곽 (x × y)", f"{BASE_L:.0f} × {BASE_W:.0f} mm"),
+        ("휠베이스 (앞뒤 축 간격)", f"{2 * AXLE_X:.0f} mm"),
+        ("트레드 (좌우 바퀴 중심 간격)", f"{2 * WHEEL_Y:.1f} mm"),
+        ("레일 윗면 높이", f"{RAIL_Z + S / 2:.1f} mm"),
+        ("축크로스 x", f"±{AXLE_CROSS_X:.0f} mm"),
+        ("기둥", f"{sum(b.label.startswith('기둥') for b in g['frame'])} 본, "
+               f"x={' · '.join(f'{x:+.0f}' for x in POST_X)} × y=±{RAIL_Y:.0f}, "
+               f"높이 {POST_H:.0f} (윗면 z={FRAME_TOP + POST_H:.1f})"),
+        ("3030 절단", " + ".join(f"{l} × {n}" for l, n in sorted(cuts.items(), reverse=True))),
+        ("3030 합계", f"실길이 {total / 1000:.2f} m / 과금 {billed / 1000:.2f} m "
+                    f"({billed / tslot.CUT_UNIT * tslot.UNIT_PRICE:,.0f}원)"),
+        ("체결볼트 M6x15", f"{len(g['bolt'])} 개"),
+    ] + metrics_floor() + metrics_parts(g) + metrics_wiring()
+
+
+WIRING_KEYS = tuple(WR.GROUPS)
+NEW_KEYS = ("dist_rail", "dist_nbar", "connector", "usb_hub", "aux_board")
+WIRE_KEYS = tuple(k for k in WR.GROUPS if k.startswith("wire_"))
+
+
+def _trim(leg, k=20.0):
+    """전선끼리 검사용 — 양 끝 k mm 를 뺀다 (같은 단자대 · 간선 끝에 모이는 것은 묶음)."""
+    p = [np.array(x, float) for x in leg]
+    k = min(k, WR.plen(leg) / 3)
+    for end in (0, 1):
+        q = p if end == 0 else p[::-1]
+        kk = k
+        while np.linalg.norm(q[1] - q[0]) < kk and len(q) > 2:
+            kk -= np.linalg.norm(q[1] - q[0])
+            q.pop(0)
+        d = np.linalg.norm(q[1] - q[0])
+        q[0] = q[0] + (q[1] - q[0]) * min(kk / d, 0.9)
+        p = q if end == 0 else q[::-1]
+    return p
+
+
+def verify_wiring(g):
+    """v28 배선 — ① 전선 · 간선 · 새 부품이 다른 부품을 뚫지 않는다 (끝 단자 부품만 봐준다)
+    ② 전선끼리 안 겹친다 (양 끝 20 mm 빼고) ③ 끝점이 단자 부품에 닿는다 ④ 대조군 (배터리 속으로 옮기면 걸린다).
+    겹침은 조각 (원기둥 · 구) 하나씩 잰다 — wiring.collide."""
+    bad = []
+    env = [p for k, v in g.items() if k not in WIRING_KEYS and k != "cable" for p in v]
+    newp = [p for k in NEW_KEYS for p in g.get(k, [])]
+    idx_env = WR.solid_index(env)
+    idx_all = idx_env + WR.solid_index(newp)
+    n_hit = 0
+    for w in WIRES:
+        for leg in w.legs():
+            h = WR.collide(WR.tube(leg, w.d), idx_all, w.ends)
+            if h:
+                n_hit += 1
+                bad.append(f"전선 {w.label} → {list(h.items())[:2]}")
+    for t in g.get("harness", []):
+        h = WR.collide(t, idx_all)
+        if h:
+            n_hit += 1
+            bad.append(f"간선 {t.label} → {list(h.items())[:2]}")
+    for p in newp:
+        h = WR.collide(p, idx_env)
+        if h:
+            n_hit += 1
+            bad.append(f"새 부품 {p.label} → {list(h.items())[:2]}")
+    print(f"  배선 간섭 (전선 {sum(len(w.legs()) for w in WIRES)} 가지 · 간선 {len(g.get('harness', []))} · 새 부품 {len(newp)}): {n_hit} 건")
+    # ② 전선끼리 — 양 끝 20 mm 를 뺀 관을 조각별로
+    tubes = []
+    for w in WIRES:
+        for leg in w.legs():
+            t = WR.tube(_trim(leg), w.d)
+            t.label = w.label
+            tubes.append((w, t))
+    ww = []
+    for i, (wa, ta) in enumerate(tubes):
+        idx_b = WR.solid_index([tb for wb, tb in tubes[i + 1:] if wb is not wa])
+        h = WR.collide(ta, idx_b, tol=0.5)
+        ww += [f"{wa.label} × {k}" for k in h]
+    print(f"  전선끼리 겹침 (양 끝 20 mm 뺌): {len(ww)} 건")
+    bad += [f"전선끼리: {x}" for x in ww]
+    # ③ 끝점 — 단자 부품 (이름에 ends 문자열) 의 박스에서 4 mm 안
+    cand = env + newp + [p for k in WIRE_KEYS for p in g.get(k, [])]
+    loose = []
+    for w in WIRES:
+        legs = w.legs()
+        for pt in (legs[0][0], legs[-1][-1]):
+            pt = np.asarray(pt, float)
+            ok = False
+            for p in cand:
+                if p.label.startswith(w.label) or not any(e in p.label for e in w.ends):
+                    continue
+                lo, hi = _bb(p)
+                if (pt > lo - 4.0).all() and (pt < hi + 4.0).all():
+                    ok = True
+                    break
+            if not ok:
+                loose.append(f"{w.label} @ ({pt[0]:.0f}, {pt[1]:.0f}, {pt[2]:.0f})")
+    print(f"  끝점이 단자 부품에 닿음: {2 * len(WIRES) - len(loose)} / {2 * len(WIRES)}")
+    bad += [f"끝점이 떠 있다: {x}" for x in loose]
+    # ④ 대조군 — 바닥에 눕힌 선을 1 mm 내리면 바닥판과 겹쳐야 한다 (= 정말 바닥 위에 누워 있다)
+    for lab in ("상시+_F5-RSD입력", "USB3_앞카메라-젯슨"):
+        w = next(w for w in WIRES if w.label == lab)
+        h = WR.collide(Pos(0, 0, -1.0) * WR.tube(w.pts, w.d), idx_env, w.ends)
+        print(f"  대조군 {lab} -1 mm → 바닥판 {h.get(next((k for k in h if k.startswith('바닥판')), ''), 0)} mm3")
+        if not any(k.startswith("바닥판") for k in h):
+            bad.append(f"대조군: {lab} 가 바닥에 안 누웠다")
+    return bad
+
+
+def metrics_wiring():
+    if not WIRES:
+        return []
+    by = {}
+    tot = flat = 0.0
+    bends = 0
+    for w in WIRES:
+        by[w.kind] = by.get(w.kind, 0.0) + w.length()
+        for a, b in zip(w.pts, w.pts[1:]):
+            L = float(np.linalg.norm(np.subtract(b, a)))
+            tot += L
+            if max(a[2], b[2]) < WR.Z0 + 13.0:
+                flat += L
+        bends += max(len(w.pts) - 2, 0)
+    named = {w.label: w.length() for w in WIRES}
+    return [
+        ("배선 가닥", f"{len(WIRES)} (전선 · 케이블) — 바닥판 위 (z ≤ 바닥 + 13) 길이 {flat / tot * 100:.0f} %, 꺾임 합 {bends}"),
+        ("전선 길이 (굵기별, 여유 없이)", " · ".join(f"{k} {v / 1000:.2f} m" for k, v in sorted(by.items()))),
+        ("길이가 정해진 케이블", f"앞 카메라 USB {named.get('USB3_앞카메라-젯슨', 0) / 1000:.2f} m · "
+                         f"뒤 카메라 USB {named.get('USB3_뒤카메라-젯슨', 0) / 1000:.2f} m · "
+                         f"안테나 동축 {max(named.get('동축_안테나왼-젯슨', 0), named.get('동축_안테나오른-젯슨', 0)) / 1000:.2f} m · "
+                         f"LAN {named.get('LAN_포트-젯슨', 0) / 1000:.2f} m · USB-C 연장 {named.get('USB-C연장_포트-젯슨', 0) / 1000:.2f} m"),
+    ]
+
+
+def verify_parts(g):
+    """부품 상자 — 서로 · 기둥 · 판볼트 머리와 안 겹치고, 판 위에 있고, 케이블 구멍을 안 막는다."""
+    fl = FL.Floor(sys.modules[__name__])
+    parts = [p for k, v in g.items() if k.startswith("part_") for p in v]
+    bad = []
+    v_self = 0.0
+    for i, a in enumerate(parts):
+        v, _ = _overlap([a], parts[i + 1:])
+        v_self += v
+        if v > 1.0:
+            bad.append(f"부품끼리 겹침: {a.label}")
+    print(f"  간섭 부품끼리: {v_self:.2f} mm3")
+    for name, other in (("프레임 (기둥)", g["frame"]), ("판볼트 머리", g["floor_bolt"]),
+                        ("바닥판", g["floor"])):
+        v, _ = _overlap(parts, other)
+        print(f"  간섭 부품-{name}: {v:.2f} mm3")
+        if v > 1.0:
+            bad.append(f"부품-{name}")
+    # 판 밖으로 나가지 않는다 (노치 · 가장자리)
+    for p in parts:
+        lo, hi = _bb(p)
+        if (abs(lo[:2]) > [fl.L / 2, fl.W / 2]).any() or (abs(hi[:2]) > [fl.L / 2, fl.W / 2]).any():
+            bad.append(f"판 밖: {p.label}")
+    # 케이블 구멍 위는 비운다
+    keep = [Pos(gx, gy, fl.z0 + FL.PLATE_T) * Cylinder(PT.CABLE_KEEP_R, PT.CABLE_KEEP_H,
+                                                      align=(Align.CENTER, Align.CENTER, Align.MIN))
+            for gx, gy in fl.grommets]
+    v, _ = _overlap(parts, keep)
+    print(f"  간섭 부품-케이블 구멍 위 (반경 {PT.CABLE_KEEP_R:g}): {v:.2f} mm3")
+    if v > 1.0:
+        bad.append("부품이 케이블 구멍을 막는다")
+    # 대조군 — 부품을 1 mm 내리면 판과 겹친다 (= 판 위에 놓여 있다)
+    v, _ = _overlap([Pos(0, 0, -1.0) * p for p in parts], g["floor"])
+    print(f"  대조군 부품 -1mm → 바닥판 겹침 {v:.0f} mm3")
+    if v < 100.0 * len(parts):
+        bad.append("대조군: 부품이 판 위에 안 놓였다")
+    return bad
+
+
+def metrics_parts(g):
+    """무게중심은 무게가 알려진 부품만 (바운딩박스 중심 기준). 무게 미상은 따로 적는다."""
+    mass = {p[1]: p[5] for p in PT.PARTS}
+    parts = [p for k, v in g.items() if k.startswith("part_") for p in v]
+    known = [(p, mass[p.label]) for p in parts if mass.get(p.label)]
+    m = sum(w for _, w in known)
+    c = sum(np.array(tuple(p.bounding_box().center())) * w for p, w in known) / m
+    top = max(p.bounding_box().max.Z for p in parts)
+    unknown = [p.label for p in parts if not mass.get(p.label)]
+    return [
+        ("부품", f"{len(parts)} 개 (실측 치수 모델, 출처 parts.py)"),
+        ("부품 무게 (알려진 것)", f"{m:.2f} kg" + (f" — 무게 미상: {', '.join(unknown)}" if unknown else "")),
+        ("부품 무게중심", f"x={c[0]:+.1f} · y={c[1]:+.1f} · z={c[2]:.1f} mm (휠베이스 가운데 x=0 기준)"),
+        ("가장 높은 부품 윗면", f"z={top:.1f} — 기둥 윗면 z={FRAME_TOP + POST_H:.1f} 까지 "
+                         f"{FRAME_TOP + POST_H - top:.1f} mm 남음"),
+    ]
+
+
+def metrics_floor():
+    fl = FL.Floor(sys.modules[__name__])
+    plate = fl.plate()
+    L, need, maxlen = fl.bolt_len()
+    return [
+        ("바닥판 재료", f"{FL.MAT_NAME} {FL.PLATE_T:g}t — {FL.MAT_NOTE}"),
+        ("바닥판 크기 · 무게", f"{fl.L:.0f} × {fl.W:.0f} × {FL.PLATE_T:g}, 약 {fl.mass_kg(plate):.2f} kg"),
+        ("바닥판 구멍", f"M6 고정 {len(fl.mount_holes())} · 케이블 그로밋 Ø{FL.GROMMET_D:g} {len(fl.grommets)} · "
+                      f"M5 격자 {len(fl.grid_holes())} · 기둥 노치 {len(fl.notches())} "
+                      f"(x={' · '.join(f'{x:+.0f}' for x in fl.notch_xs)}, 기둥 6 · 10 본 겸용)"),
+        ("판볼트", f"M6x{L} + 와셔 (필요 {need:.1f} ~ 최대 {maxlen:.1f})"),
+        ("받침 없는 구간 (크로스 안쪽면 사이)", " · ".join(f"{s:g}" for s in fl.spans()) + " mm"),
+    ]
+
+
+def export(groups, out):
+    """record.py 가 짓기 직후 부른다 — 재단용 DXF · 도면 · 재단 규격 (바닥판 + 외관판)."""
+    SH.export(SH.Shell(sys.modules[__name__]), out, HERE / "shell_cut.md", VERSION)
+    fl = FL.Floor(sys.modules[__name__])
+    plate = {d["key"]: d["parts"] for d in groups}["floor"][0]
+    FL.export_dxf(fl, out / "floor_plate.dxf")
+    FL.drawing(fl, out / "floor_plate.png")
+    FL.cut_spec(fl, plate, HERE / "floor_plate_cut.md", VERSION)
+    import bom                                                   # v16: BOM (형상에서 수량 + 조사된 가격 · 링크)
+    known, unknown = bom.write(groups, sys.modules[__name__], HERE / "bom.md", out / "bom.csv", VERSION,
+                               extra=SH.camera_bom() + WR.bom_rows(WIRES))
+    print(f"  BOM: 확인된 금액 {known:,.0f} 원, 단가 미확인 {unknown} 줄")
+
+
+# ---------------------------------------------------------------- 출력
+def compounds(groups):
+    out = []
+    for d in groups:
+        c = Color(d["color"])
+        for p in d["parts"]:
+            p.color = c
+        comp = Compound(children=d["parts"])
+        comp.label, comp.color = d["label"], c
+        out.append(comp)
+    return out
+
+
+def main():
+    """record.py 로 넘긴다 — 짓기 · 검증 · STEP · 뷰어 · 기록을 한 프로세스에서 한 번에."""
+    sys.path.insert(0, str(HERE.parent))
+    import record
+    sys.argv = [record.__file__, VERSION, "--rebuild"]
+    record.main()                          # 상주 워커가 있으면 그쪽으로 (import 20 s 생략)
+
+
+if __name__ == "__main__":
+    main()

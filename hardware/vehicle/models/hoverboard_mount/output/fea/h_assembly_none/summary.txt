@@ -1,0 +1,30 @@
+Bonded assembly FEA — no reinforcement
+Case: none   env: {'LOW_SHELF': '0', 'TIE': '0', 'LOW_SIDE': '0', 'TONGUE': '0'}
+STEP: D:\build123d\models\hoverboard_mount\output\step\h_assembly_none.step   solids after fuse: 2
+Rail stubs 2 x (30x30 wall 2.15 equivalent tube, L=240.0) at y=+/-210.0, z=108.85; ends x=+/-120 fixed (720 nodes)
+Clamps: low_clamp() at y=+/-263.7, z=+79.35 (-y side rotated 180 deg about z)
+No reinforcement (two independent halves)
+Load: 800 N upward on each axle seat, eccentricity 55 mm outboard (inboard/outboard couple as in run_clamp_fea)
+Load terms [set, nodes, total N, per-node N]:
+  SEAT_L_OUTBOARD: 237, 2196.167050, 9.266527638
+  SEAT_L_INBOARD: 232, -1396.167050, -6.017961423
+  SEAT_R_OUTBOARD: 236, 2194.591680, 9.299117286
+  SEAT_R_INBOARD: 233, -1394.591680, -5.985372015
+Mesh: target 4.0 mm (min 1.2), C3D10; elements 92582 (clamp 66954, aluminium 25628), nodes 157642
+Materials: clamps PETG isotropic estimate E=2100 nu=0.38; profile aluminium 6063-T5 profile E=69000 nu=0.33
+Solve: 44 s (OMP_NUM_THREADS=4)
+Seat camber (dUz/dy_out, + = outboard rises):
+  left: +10.7507 mrad  (n=469, Uy_out +0.0853 mm, Uz mean +0.0630 mm, contact splay -0.7678 mm)
+  right: +10.7480 mrad  (n=469, Uy_out +0.0851 mm, Uz mean +0.0629 mm, contact splay -0.7678 mm)
+Load-path diagnostics (rail bottom at x~0; leg tops z=93.85):
+  left: rail-stub twist +3.331 mrad, rail rise +0.0292 mm, leg-top slope +4.597 mrad
+  right: rail-stub twist +3.322 mrad, rail rise +0.0289 mm, leg-top slope +4.593 mrad
+Max |U|: 0.398571 mm (clamp region 0.398571)
+Clamp structural stress (clamp nodes > 2.0 mm from bonded faces): 16.984 MPa at x=+8.1 y=+233.3 z=+78.9
+Clamp max von Mises incl. bond edges (do not quote): 32.093 MPa
+Aluminium profile max von Mises: 50.622 MPa
+Reaction at fixed rail ends [Fx,Fy,Fz]: [0.0002, -0.0003, -1600.0001]  (applied Fz total +1600.0)
+Sum of all RF: [0.0002, -0.0003, 0.0019]
+Limits: bonded (no T-nut/bracket/bolt compliance, no preload/contact) -> joint stiffness overestimated; one C3D10 layer through the 2.15 mm tube wall; equivalent square tube matches 3030 bending I only.
+VTU: D:\build123d\models\hoverboard_mount\output\fea\h_assembly_none\h_assembly.vtu
+Preview: D:\build123d\models\hoverboard_mount\output\fea\h_assembly_none\stress_deformed_800N.png

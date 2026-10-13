@@ -1,0 +1,315 @@
+{
+ "root": {
+  "key": "root",
+  "title": "모빌리티 베이스 작업일지 (2026-07 ~ 09)",
+  "html": "synth_timeline.html",
+  "labels": {
+   "iconClass": "bx bx-book-open",
+   "project": "build123d"
+  },
+  "children": [
+   {
+    "key": "entries",
+    "title": "일지 — 날짜순",
+    "html": "index_entries.html",
+    "labels": {
+     "iconClass": "bx bx-calendar"
+    },
+    "children": [
+     {
+      "key": "entry_01a",
+      "title": "07-27 (월) 18:11~19:56 KST — 프로파일 단면에서 측면 커버까지",
+      "html": "entry_01a.html",
+      "images": [
+       "01_tslot_section_2020.png",
+       "02_tslot_frame_400x300x400.png",
+       "03_base_v1_iso.png",
+       "04_base_v1_front.png",
+       "05_v2_twolevel_iso.png",
+       "06_v2_bay_mockups.png",
+       "07_v3_skirt_added.png",
+       "08_v3_cover_removed.png",
+       "09_v4_upperframe_hidden.png",
+       "10_v4_cover_removed.png"
+      ]
+     },
+     {
+      "key": "entry_01b",
+      "title": "07-27 (월) 20:04~21:24 KST — 커버 기능 요소: 후면 패널·얼굴·환기·배선·배터리 브라켓",
+      "html": "entry_01b.html",
+      "images": [
+       "11_v5_rear_estop_door.png",
+       "12_v5_rear_ports_elevation.png",
+       "13_v6_face_final.png",
+       "14_v6_front34.png",
+       "15_v7_face_with_vents.png",
+       "16_v7_rear_with_fans.png",
+       "17_v7_bay_open.png",
+       "18_v7_battery_bracket_top.png",
+       "19_v7_iso.png"
+      ]
+     },
+     {
+      "key": "entry_02a",
+      "title": "07-27 (월) 21:25~23:43 KST — 허브모터 배제와 구동계 재검토",
+      "html": "entry_02a.html",
+      "images": []
+     },
+     {
+      "key": "entry_02b",
+      "title": "07-27 (월) 23:46 ~ 07-28 (화) 02:03 KST — 모터 후보 검토와 호버보드 허브모터 전환",
+      "html": "entry_02b.html",
+      "images": [
+       "20_ref_spg_s9d_torque_table.png",
+       "21_ref_spg_s8d_torque_table.png",
+       "22_cover_skirt.png",
+       "23_cover_skirt_iso.png",
+       "24_cover_fender.png",
+       "25_cover_fender_iso.png"
+      ]
+     },
+     {
+      "key": "entry_03",
+      "title": "07-28 (화) 17:25~23:37 KST — 스워브 전환: 킹핀·벨트·서스펜션",
+      "html": "entry_03.html",
+      "images": [
+       "26_swerve_low.png",
+       "27_swerve_iso.png",
+       "28_swerve_shell.png",
+       "29_swerve_shell_iso.png",
+       "30_swerve_face.png",
+       "31_swerve_final_iso.png",
+       "32_swerve_module_detail.png",
+       "33_swerve_module_suspension.png"
+      ]
+     },
+     {
+      "key": "entry_04",
+      "title": "07-28 (화) 23:41 ~ 07-29 (수) 12:02 KST — 외장 --\\__/--, 실물 Xtion, 그리고 움직이지 않던 서스펜션",
+      "html": "entry_04.html",
+      "images": [
+       "34_swerve_skirt_side.png",
+       "35_swerve_face_xtion.png",
+       "38_swerve_shell_flange.png",
+       "37_swerve_camera_cradle.png",
+       "36_swerve_shell_iso.png",
+       "39_swerve_rear_ports.png",
+       "40_swerve_iso_rear.png",
+       "41_swerve_drawing_sheet.png",
+       "42_swerve_view_front.png",
+       "43_swerve_view_right.png",
+       "44_swerve_view_rear.png",
+       "45_swerve_view_left.png",
+       "46_swerve_view_top.png",
+       "47_swerve_view_iso.png"
+      ]
+     },
+     {
+      "key": "entry_05",
+      "title": "07-29 (수) 16:26 ~ 07-30 (목) 02:44 KST — 배선 길을 뚫고, 적재함을 세 번 고치고, 무게를 처음 셌다",
+      "html": "entry_05.html",
+      "images": [
+       "48_cargo_slide_sequence.png",
+       "49_cargo_slide_openings.png",
+       "50_cargo_slide_detail.png",
+       "51_cargo_interior.png",
+       "52_cargo_lid_open.png",
+       "53_handle_detail.png",
+       "54_flat_module.png"
+      ]
+     },
+     {
+      "key": "entry_06",
+      "title": "07-30 (목) 07:42 ~ 07-31 (금) 11:07 KST — 모듈 3종을 더 얹고, 검사기를 의심하고, 도면을 다시 뽑다",
+      "html": "entry_06.html",
+      "images": [
+       "55_sensor_tower.png",
+       "56_arm_mount.png",
+       "57_inst_module.png",
+       "41_swerve_drawing_sheet.png",
+       "54_flat_module.png"
+      ]
+     },
+     {
+      "key": "entry_07",
+      "title": "07-31 (금) 11:20 ~ 08-01 (토) 01:11 KST — 아웃리거·확장레일을 얹었다 걷어내고, 실물 6.5인치 바퀴로 다시 앉혔다",
+      "html": "entry_07.html",
+      "images": [
+       "58_outrigger_deployed.png",
+       "58_outrigger_stowed.png",
+       "60_hub_motor_real.png",
+       "61_handle_skirt.png",
+       "62_module_bench.png"
+      ]
+     },
+     {
+      "key": "entry_08a",
+      "title": "08-01 (토) 01:15~13:27 KST — 스워브를 접고 고정 브라켓·단륜 지그로",
+      "html": "entry_08a.html",
+      "images": [
+       "60_hub_motor_real.png"
+      ]
+     },
+     {
+      "key": "entry_08b",
+      "title": "08-01 (토) 13:29~18:13 KST — 시험 지그 축소와 허브모터 축 언더컷",
+      "html": "entry_08b.html",
+      "images": [
+       "60_hub_motor_real.png"
+      ]
+     },
+     {
+      "key": "entry_09",
+      "title": "08-01 (토) 20:41 ~ 08-05 (수) 16:44 KST — 축 나사부 부재 확인과 휠브라켓의 3030 프로파일 전환",
+      "html": "entry_09.html",
+      "images": []
+     },
+     {
+      "key": "entry_10a",
+      "title": "08-07 (금) 01:07~03:44 KST — ㄷ자 휠마운트를 세우고 제작법을 고르다",
+      "html": "entry_10a.html",
+      "images": []
+     },
+     {
+      "key": "entry_10b",
+      "title": "08-07 (금) 03:45~14:34 KST — 프린트판 분리, 프레임 이식, 도면 스크립트 복원",
+      "html": "entry_10b.html",
+      "images": [
+       "41_skid_drawing_sheet.png",
+       "42_skid_view_front.png",
+       "43_skid_view_right.png",
+       "44_skid_view_rear.png",
+       "45_skid_view_left.png",
+       "46_skid_view_top.png",
+       "47_skid_view_iso.png"
+      ]
+     },
+     {
+      "key": "entry_11",
+      "title": "08-10 (월) 00:00 ~ 08-11 (화) 16:46 KST — 기록 공백을 채우고, 적재함을 기성 바구니 기준으로 다시 짰다",
+      "html": "entry_11.html",
+      "images": []
+     },
+     {
+      "key": "entry_12",
+      "title": "08-12 (수) 20:32 ~ 08-13 (목) 01:09 KST — 휠 브라켓 파손 원인 분석과 하단 클램프 대안",
+      "html": "entry_12.html",
+      "images": [
+       "41_wheelmount_drawing_sheet.png",
+       "42_wheelmount_view_front.png",
+       "43_wheelmount_view_right.png",
+       "44_wheelmount_view_rear.png",
+       "45_wheelmount_view_left.png",
+       "46_wheelmount_view_top.png",
+       "47_wheelmount_view_iso.png"
+      ]
+     },
+     {
+      "key": "entry_13",
+      "title": "08-14 (금) 11:18 ~ 08-15 (토) 13:42 KST — 브라켓을 네 번 다시 그렸다: A/B → C → D → 통짜 D",
+      "html": "entry_13.html",
+      "images": []
+     },
+     {
+      "key": "entry_13b",
+      "title": "08-15 (토) 15:59 ~ 08-19 (수) 23:31 KST — 세션 밖(GPT/Codex): 프레임 폭 450 통일·FEA 파이프라인·구형 브라켓 파손 재현",
+      "html": "entry_13b.html",
+      "images": []
+     },
+     {
+      "key": "entry_14a",
+      "title": "08-21 (금) 00:17~01:41 KST — 인수인계 검증, 실물 파손 반영, 플랜지 없는 FEA, 젖힘 모멘트 시각화",
+      "html": "entry_14a.html",
+      "images": [
+       "63_why_tipping_moment.png",
+       "64_tipping_animation.gif"
+      ]
+     },
+     {
+      "key": "entry_14b",
+      "title": "08-21 (금) 01:43~03:31 KST — 액슬 타이 보강과 휘어짐 기준 순위 정정",
+      "html": "entry_14b.html",
+      "images": [
+       "65_frame_load_cases.png",
+       "66_frame_corner_load.gif"
+      ]
+     },
+     {
+      "key": "entry_15",
+      "title": "08-21 (금) 07:57 ~ 08-27 (목) 02:45 KST — 봉 길이 400 고정, git 초기 커밋, 재료 검토, T텅, 여분 3030 을 타이로",
+      "html": "entry_15.html",
+      "images": []
+     },
+     {
+      "key": "entry_16",
+      "title": "09-10 (목) 10:43 ~ 09-15 (화) 19:08 KST — 전체 차량 뷰어 탑재와 형상 기반 BOM 산출 (+ 09-15 일지화 착수)",
+      "html": "entry_16.html",
+      "images": []
+     }
+    ]
+   },
+   {
+    "key": "synth_decisions",
+    "title": "결정 기록 — 무엇을 왜 골랐나",
+    "html": "synth_decisions.html",
+    "images": [
+     "63_why_tipping_moment.png",
+     "19_v7_iso.png",
+     "24_cover_fender.png",
+     "27_swerve_iso.png",
+     "33_swerve_module_suspension.png",
+     "60_hub_motor_real.png",
+     "41_skid_drawing_sheet.png",
+     "41_wheelmount_drawing_sheet.png",
+     "51_cargo_interior.png",
+     "65_frame_load_cases.png",
+     "47_skid_view_iso.png"
+    ]
+   },
+   {
+    "key": "synth_lessons",
+    "title": "삽질과 교훈 — 막혔던 것들",
+    "html": "synth_lessons.html",
+    "images": [
+     "01_tslot_section_2020.png",
+     "60_hub_motor_real.png",
+     "63_why_tipping_moment.png",
+     "65_frame_load_cases.png",
+     "53_handle_detail.png"
+    ]
+   },
+   {
+    "key": "synth_numbers",
+    "title": "핵심 숫자 카드 — 2026-09-15 기준으로 지금도 유효한 값",
+    "html": "synth_numbers.html",
+    "images": [
+     "41_skid_drawing_sheet.png",
+     "65_frame_load_cases.png",
+     "60_hub_motor_real.png",
+     "63_why_tipping_moment.png"
+    ]
+   },
+   {
+    "key": "synth_files",
+    "title": "파일 지도 — 어디에 뭐가 있나",
+    "html": "synth_files.html",
+    "images": [
+     "41_skid_drawing_sheet.png",
+     "41_wheelmount_drawing_sheet.png",
+     "65_frame_load_cases.png",
+     "63_why_tipping_moment.png",
+     "60_hub_motor_real.png"
+    ]
+   },
+   {
+    "key": "synth_next",
+    "title": "남은 일과 다음 단계 (2026-09-15 기준)",
+    "html": "synth_next.html",
+    "images": [
+     "63_why_tipping_moment.png",
+     "65_frame_load_cases.png"
+    ]
+   }
+  ]
+ }
+}
