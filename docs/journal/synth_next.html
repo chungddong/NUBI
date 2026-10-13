@@ -1,0 +1,238 @@
+<p>일지 21편의 "남긴 일"을 전부 모아 저장소(<code>D:/build123d</code>)와 대조했다. 코드·문서·git 에서 이미 처리된 것은 뺐고, 아직 안 된 것만 우선순위를 붙여 남긴다. 시각은 KST, 수치는 각 일지와 현재 파일에서 옮겼다. 저장소만으로 확인할 수 없는 실물 상태(재출력 여부, 구매 여부, 실측 여부)는 "기록 없음"으로 적었다 — 실제로 했는데 기록만 없는 것일 수 있다.</p>
+
+<h3>0. 이미 끝난 것 (이 문서에서 뺀 항목)</h3>
+
+<table>
+<thead><tr><th>일지에서 남겼던 일</th><th>처리된 근거</th></tr></thead>
+<tbody>
+<tr><td>git init (08-13, 08-21 새벽)</td><td>08-21 08:12 초기 커밋 <code>14fb653</code>, 추적 256 파일 28.5 MB</td></tr>
+<tr><td>볼트 15 mm 실측 반영, 옆 플랜지 제거, 카운터보어 역산</td><td><code>parameters.py</code> <code>LOW_BOLT_LEN=15</code>, <code>LOW_SIDE</code> 기본 꺼짐, <code>LOW_CBORE=(16, 32.3)</code>, <code>rail_bolt_len()</code> 어서트</td></tr>
+<tr><td>FEA 파이프라인 구축 (08-13 환경 조사만)</td><td>STEP → Gmsh → CalculiX, <code>run_clamp_fea.py</code> + <code>tools/fea/structural_stress.py</code></td></tr>
+<tr><td>액슬 타이 모델링 + 좌우 연결 FEA (08-21 새벽)</td><td><code>TIE</code>, <code>tie_force()</code>, 접지 스프링 반영. PETG 1.907 → 0.263 mm</td></tr>
+<tr><td>도면·DXF 미실행 (08-21 03:26)</td><td><code>output/drawing</code>, <code>output/dxf</code> 5개 — 08-21 07:59 재생성</td></tr>
+<tr><td>봉 길이 유도값 397.4 → 라운드 수</td><td><code>TIE_ROD_LEN=400</code>, <code>TIE_TAP_DEPTH=15</code>, 물림 13.3 어서트 (코드만. 문서는 §5 참조)</td></tr>
+<tr><td>타이 계산의 알루미늄 E 버그, M8x403 레이블, 브래킷 누락</td><td><code>tie_force()</code> E=206,000, 레이블은 <code>TIE_ROD_LEN</code>/<code>TIE_PROF_LEN</code> 참조, <code>tie_brackets()</code> 추가</td></tr>
+<tr><td>통합 스크립트의 M6x20 고정값·타이 없음 (09-10)</td><td><code>vehicle_shell_integration.py</code> 가 <code>P.LOW_BOLT_LEN</code>·<code>axle_ties()</code> 사용 — 단 미커밋</td></tr>
+<tr><td>BOM 을 형상에서 뽑기</td><td><code>tools/bom/bom.py</code> → <code>docs/bom.md</code>/<code>.csv</code> — 미커밋</td></tr>
+<tr><td>lever.html 로컬 저장</td><td><code>docs/interactive/lever.html</code> + README 출처 표</td></tr>
+<tr><td>build-log 14막에서 멈춤 (07-29)</td><td>28막 + 29~32절, 1,630줄까지 채워짐 (08-09 분까지)</td></tr>
+<tr><td>설계 하중 800 N 이 가정이라는 것</td><td>프레임 보요소 해석 <code>tools/frame/frame_fea.py</code> — 구석 탑승 865 N 으로 검증</td></tr>
+<tr><td>Trilium 에 쓰는 도구 없음 (09-15)</td><td><code>tools/trilium/push_journal.py</code> 작성됨 — 단 토큰·<code>docs/journal/</code> 은 아직 없다 (§8)</td></tr>
+</tbody>
+</table>
+
+<h3>1. 우선순위 한눈에</h3>
+
+<p>순서를 정한 기준은 하나다 — <strong>뒤의 일을 막고 있는가.</strong> 타이 길이가 정해지지 않으면 클램프 깊이(<code>LOW_D</code>)가 흔들려 재출력·FEA·BOM·커밋이 전부 대기한다. 그래서 결정 하나가 1순위고, 그 다음이 실측(재면 끝나는 것), 제작(사고 뽑는 것), 문서 순이다.</p>
+
+<table>
+<thead><tr><th>순위</th><th>항목</th><th>왜 지금인가</th><th>하면 끝나는 것</th><th>현재 상태 근거</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>타이 프로파일 길이 <strong>360 vs 390</strong> 결정</td><td>클램프 깊이 46.6 → 30 이 걸려 있어 형상·FEA·STL·BOM 이 전부 이 결정 뒤에 있다</td><td>결정 (실물 대보기 1건)</td><td><code>TIE_PROF_LEN=360</code>, <code>LOW_D=46.6</code>, 08-27 02:45 질문에서 대화 종료</td></tr>
+<tr><td>2</td><td>M6 <strong>스프링너트 인발 실측</strong></td><td>설계 전체에서 유일하게 안 잰 값. 차량 허용하중을 2배 넘게 좌우한다</td><td>재기 (프로파일 토막 + 저울)</td><td><code>TNUT_PULLOUT=1500</code> 보수 하한 그대로, 실측 기록 없음</td></tr>
+<tr><td>3</td><td>클램프 <strong>4개 재출력</strong> (인필 100%) + 브래킷 8개</td><td>08-21 출력분은 플랜지 있던 63.9 판이고 그 플랜지가 부러졌다. 현재 형상 38.9 판의 실물이 없다</td><td>뽑기 (12.8 h + 1.4 h, 약 16,000원) — 단 1번 뒤에</td><td>재출력 기록 없음</td></tr>
+<tr><td>4</td><td>타이 <strong>철물 구매</strong></td><td>3030 타이는 브래킷 볼트·드롭인 T너트가 없으면 못 단다</td><td>사기 (M6x20 16 + 드롭인 T너트 8 = 4,240원)</td><td><code>docs/bom.md</code> 구매 행, 구매 기록 없음</td></tr>
+<tr><td>5</td><td><strong>다이얼 게이지</strong>로 바퀴 바깥 밀림 실측</td><td>FEA 예측(타이 없음 +0.67 → 타이 −0.024 mm)을 실물과 맞춰 봐야 해석을 믿을 수 있다</td><td>재기 (3·4 뒤)</td><td>인수인계 §10-6 "실물 정적 proof test" 미실행</td></tr>
+<tr><td>6</td><td><code>CLAUDE_HANDOFF.md</code> §5.0 갱신</td><td>지금도 Ø8×397.4 / 물림 12×2 / 깊이 12. 발주 때 보는 문서가 코드와 어긋난다</td><td>고치기 (30분)</td><td>§5.0 189행, 210행 "3030 390 은 접었다" 표</td></tr>
+<tr><td>7</td><td><code>build-log.md</code> 를 08-10 이후로 잇기 (08-12 실물 파손부터는 한 줄도 없다)</td><td>31절 최종 사양이 적재함 170 L·ㄷ자 마운트 "최종" — 둘 다 지금과 다르다</td><td>쓰기 (7개 막) — 이 일지 세트가 그 초안이 된다</td><td>1,630줄, 마지막 사건 08-09</td></tr>
+<tr><td>8</td><td>FEA 결과 폴더 이름·기준 케이스 복원</td><td>기준값 45.3 MPa / 0.0582 mm 가 어느 폴더에도 없다</td><td>고치기 + 재실행 2회</td><td><code>clamp_800N_h3mm_e55mm_up</code> 이 플랜지+타이 실행(18.0 MPa)으로 덮임</td></tr>
+<tr><td>9</td><td>셸·적재함 <strong>판재 전환</strong> 결정</td><td>출력 406 h 의 76%(309 h)와 베드 초과 14건이 여기 걸려 있다</td><td>결정 + 견적 (재단·절곡 공수)</td><td><code>docs/bom.md</code> 대안 표 — 확정 아님</td></tr>
+<tr><td>10</td><td>미커밋 변경 정리</td><td>08-21 커밋 하나뿐. 모빌리티 8파일 + BOM + 무관 프로젝트 11폴더가 섞여 있다</td><td>커밋 3~4묶음, <code>.gitignore</code> 2줄</td><td><code>git status</code> M 10 / ?? 20</td></tr>
+<tr><td>11</td><td>T텅 (일체형 T너트) 보류 확정</td><td>PLA 단계에선 오버행 때문에 못 쓴다. 알루미늄 CNC 갈 때 켠다</td><td>실물 슬롯 실측 1건만 미리</td><td><code>TONGUE</code> 기본 0</td></tr>
+<tr><td>12</td><td>그 밖의 오래된 미결</td><td>배터리 치수, 무게중심, 핸들 탈착, 단가 실견적, Trilium 토큰</td><td>§8 참조</td><td>—</td></tr>
+</tbody>
+</table>
+
+<p data-img="63_why_tipping_moment.png"></p>
+
+<h3>2. 결정 하나: 타이 프로파일 360 으로 자를지, 390 그대로 쓸지</h3>
+
+<p>08-27 02:42 사용자가 부품 표준화를 지적했다.</p>
+<blockquote>프레임에 이미 같은 사이즈의 3030프로파일이 존재하는데 너무 크기가 다르잖아</blockquote>
+<p>390 을 자르지 않고 쓰려면 클램프 안쪽면 사이 간격(420 − 클램프 깊이)이 390 이어야 하고, 그러려면 클램프 깊이 <code>LOW_D</code> 를 46.6 에서 30 으로 줄여야 한다. "깊이 30 + 타이 X 오프셋 25 로 바꿀까"를 물은 채 02:45 에 대화가 끝났고 그 뒤 설계 대화는 없다. 현재 저장소는 어느 쪽도 확정하지 않은 상태다.</p>
+
+<table>
+<thead><tr><th></th><th>A. 360 으로 절단 (현재 코드)</th><th>B. 390 그대로 (깊이 30 안)</th></tr></thead>
+<tbody>
+<tr><td>클램프 깊이 <code>LOW_D</code></td><td>46.6</td><td>30.0 (3030 폭과 같음)</td></tr>
+<tr><td>클램프 안쪽면 간격</td><td>373.4</td><td>390.0</td></tr>
+<tr><td>타이 위치</td><td>x=0 (축과 같은 선), z=−9.4, 축과 5 mm 여유</td><td>x=+10~+40 으로 25 비껴야 축(±8)을 피한다 (여유 2 mm)</td></tr>
+<tr><td>축 끝 돌출 / 모터 하우징 여유</td><td>+1.6 mm</td><td>+9.9 / 11.7 mm</td></tr>
+<tr><td>기존 상부 클램프(39.22)</td><td>안에 들어감</td><td>9.2 mm 넘침. 볼트(±11.87)는 받쳐진다</td></tr>
+<tr><td>축 시트 면압</td><td>1.07 MPa</td><td>1.67 MPa (한계 120 의 1.4%)</td></tr>
+<tr><td>비대칭 비틀림</td><td>없음</td><td>32 N·m → 레일볼트 2개 전단 462 N (M6 한계의 6%). 앞뒤 축에서 좌우 번갈아 두면 상쇄</td></tr>
+<tr><td>회전강성</td><td>8.89e7</td><td>8.21e7 (7.6% 낮음. 변위로는 1% 안쪽으로 보이나 확실하지 않다)</td></tr>
+<tr><td>자투리</td><td>30 × 2</td><td>0</td></tr>
+<tr><td>추가로 필요한 일</td><td>없음 (FEA 완료 0.2627 mm)</td><td>깊이 30 형상 → STEP → FEA 2메쉬 재실행, 상부 클램프 9.2 mm 넘침 실물 확인</td></tr>
+</tbody>
+</table>
+
+<p>09-10 세션 요약은 "390 유지(부품 표준화)" 를 방향으로 적었으나 <code>parameters.py</code> 는 <code>TIE_PROF_LEN=360</code> 그대로다.</p>
+
+<p><strong>무엇을 대보면 결정되나.</strong> ① 여분 390 이 실제로 2본 있는지(인수인계 §3 는 실차에 축 보강 크로스가 없으면 5개 구매라 적고 있고, 09-10 BOM 은 "남는 390 2본" 을 전제한다 — 실물 재고는 저장소로 확인 불가). ② 상부 클램프가 하부보다 9.2 mm 넘쳐도 되는지 — 지금 있는 실물 상부 클램프를 30 mm 폭 자리에 얹어 보면 된다. 이 둘이 괜찮으면 B, 아니면 A 다. 성능 차이(1.2% 안팎)는 결정 근거가 안 된다.</p>
+
+<p><strong>결정 뒤 순서.</strong> <code>parameters.py</code>(<code>LOW_D</code> 유도식 또는 <code>TIE_PROF_LEN</code>) → <code>low_clamp.py</code> 실행으로 STEP/STL 재생성 → FEA 3 mm·4 mm 두 번(수렴 0.7% 이내, 반력 합 800 N 확인) → <code>docs/bom.md</code> 절단 행 → <code>CLAUDE_HANDOFF.md</code> §5.0 → 커밋. 09-10 에 BOM 을 커밋하지 않은 이유가 바로 이 미결분과 섞이지 않기 위해서였다.</p>
+
+<h3>3. 재면 끝나는 것 — 실측 3건</h3>
+
+<p><strong>3-1. M6 스프링너트 인발력.</strong> 08-13, 08-15, 08-21 세 번 "유일하게 안 잰 값"으로 남았고 지금도 <code>parameters._TNUT_PULLOUT[6.0] = 1500</code> 보수 하한이다. 왜 중요한가: 클램프를 알루미늄으로 바꾸면 본체는 6.1배 강해지지만 그 순간 병목이 너트 인발로 옮겨가서, 너트 품질에 따라 실제 개선은 1.05~2.8배다(08-21 00:58). 타이가 있으면 레일볼트 인발은 1,432 → 385 N(25.6%)으로 내려가 급하지 않지만, <code>lever.html</code> 의 "95% / 한계 초과" 판정, <code>docs/bom.md</code> 의 스프링너트 933 N / 드롭인 T너트 2,271 N [추정], 인수인계 §1 의 "사람 탑승 전 반드시 실측"이 전부 이 값 하나를 기다린다.</p>
+<ul>
+<li>방법: 3030 토막에 스프링너트 + M6 볼트를 걸고 매달아 당긴다. 립(두께 2.4 mm)이 벌어지는 하중을 kgf 로 읽으면 된다. 립 굽힘 모델 추정은 경제형(물림 10) 933 N / 표준(14) 1,632 N / 드롭인(16) 2,271 N — 실측이 어느 칸에 떨어지는지 보면 된다.</li>
+<li>같이 잴 것: 스프링너트 두께 (2 mm 대 박판인지 5 mm 대인지). 박판이면 자기가 먼저 휘어 립 강성의 1/3 밖에 못 쓴다(08-21 02:42).</li>
+<li>결과 반영 위치: <code>parameters._TNUT_PULLOUT</code>, <code>docs/interactive/README.md</code> 출처 표, <code>docs/bom.md</code> 슬롯너트 행.</li>
+</ul>
+
+<p><strong>3-2. 다이얼 게이지로 바퀴 바깥 밀림.</strong> 08-21 03:00 의 예측: PETG 800 N 에서 타이 없음 축 시트 바깥 밀림 +0.672 mm(전체 1.907), M8 타이 −0.024 mm(0.266), 3030 타이 −0.0244 mm(0.2627). PLA 꽉 채움은 E 비례로 −0.014 mm. 일지 기록의 예측치는 "0.03 mm 근처"다. 부러진 구형은 +2.16 mm 였다. 재는 법은 청크에 없다 — 한쪽 구석에 사람이 올라선 상태(약 80 kgf ≈ 800 N)에서 바퀴 바깥면 또는 축 끝의 Y 변위를 읽는 것이 FEA 의 "축 시트 +Y 평균"과 대응한다. 3·4번(재출력·철물)이 끝나야 잴 수 있다. 인수인계 §10 의 6번 "실물 정적 proof test와 변위 측정으로 해석 상관검증"이 이 항목이다.</p>
+
+<p><strong>3-3. 실물 3030 슬롯 치수.</strong> T텅(§7)을 켜면 레일 참조모델과 461.6 mm³ 간섭이 잡히는데, 참조 단면의 대각 웹 단순화가 캐비티 모서리를 0.20 mm 파고드는 것으로 봤다. 실물 슬롯 입구·캐비티 폭을 캘리퍼로 재야 "실물 간섭 아님"이 확정된다. 급하지 않다 — 텅은 알루미늄 갈 때 쓴다.</p>
+
+<p data-img="65_frame_load_cases.png"></p>
+
+<h3>4. 사고 뽑는 것 — 실물 제작</h3>
+
+<p><strong>4-1. 클램프 4개 재출력.</strong> 08-21 낮에 사용자가 출력해 달아 본 것은 옆 플랜지가 있던 63.9 mm 판이었고, 그 플랜지가 "툭 하니까" 부러져 <code>LOW_SIDE</code> 를 껐다. 현재 STEP(<code>output/step/low_clamp_design_d.step</code>, 92.72×46.60×38.90, 116.3 cm³)은 플랜지 없는 판이고 이것의 실물 기록은 없다. 08-21 03:00 권장 순서는 "1순위 타이, 2순위 인필 꽉 채워 재출력(2배 더, 합 14배)"이었다.</p>
+<ul>
+<li>양: 3.2 h/개 × 4 = 12.8 h, 필라멘트 14,416원 (<code>docs/bom.md</code>). 타이 코너 브래킷 8개는 6.2 cm³ × 8 ≈ 1.4 h, 1,544원. 합 약 16,000원 / 14 h.</li>
+<li>인필 100%, PLA. 재료를 바꿀 이유는 강성이 아니라 여름 온도(PLA Tg 60°C)다 — 시험 단계는 PLA 로 가고, 여름 야외는 PET-CF17(9만원/kg) 후보. 그 전에 <strong>프린터 노즐 최고 온도부터 확인</strong>해야 후보가 좁혀진다(08-22 남긴 일, 기록 없음).</li>
+<li>순서: <strong>§2 결정 뒤에</strong> 뽑는다. 깊이 30 안으로 가면 지금 STL 은 버린다.</li>
+</ul>
+
+<p><strong>4-2. 타이 철물 구매.</strong> 기본 <code>TIE_KIND="profile"</code> 기준으로 사야 하는 것은 아래 둘뿐이고, 3030 은 여분 재활용이라 0원이다.</p>
+<table>
+<thead><tr><th>품목</th><th>수량</th><th>단가</th><th>금액</th><th>비고</th></tr></thead>
+<tbody>
+<tr><td>M6x20 볼트 (브래킷 → 클램프 탭)</td><td>16</td><td>90원 [추정]</td><td>1,440원</td><td>브래킷 8 × 탭 2단</td></tr>
+<tr><td>드롭인 T너트 M6 (브래킷 → 프로파일 슬롯)</td><td>8</td><td>350원 [추정]</td><td>2,800원</td><td>경제형 스프링너트는 예압 560 N → 마찰 112 N 이라 타이 반력 방향으로 미끄러진다는 계산. 드롭인은 1,363 → 273 N</td></tr>
+<tr><td>M6x15 (브래킷 슬롯 쪽)</td><td>8</td><td>보유</td><td>0</td><td></td></tr>
+<tr><td><strong>합계</strong></td><td></td><td></td><td><strong>4,240원</strong></td><td></td></tr>
+</tbody>
+</table>
+<p>주의: "볼트당 158 N" 계산은 반력 1,268 N 을 볼트 8개로 나눈 것인데 무엇을 8개로 센 것인지 청크에 없다. 모델은 축당 브래킷 4개, 브래킷당 슬롯 볼트 1개라 한쪽 접합부의 슬롯 방향 볼트는 2개뿐이고, 그러면 볼트당 하중은 158 N 보다 크다. 드롭인 T너트로 가는 결론은 바뀌지 않지만 여유율은 낙관적일 수 있다. <code>rod</code> 로 되돌리면 대신 M8 전산볼트 1 m 봉 2개(약 1만원, 400×4 = 1,600 mm 라 1개로는 안 된다)가 필요하고 브래킷·T너트는 없어진다.</p>
+
+<h3>5. 문서 갱신 — 코드와 어긋난 곳</h3>
+
+<p><strong>5-1. <code>CLAUDE_HANDOFF.md</code> §5.0.</strong> 08-21 07:57 에 "문서 갱신"을 했다고 했지만 이 절은 지금도 다음 상태다.</p>
+<table>
+<thead><tr><th>항목</th><th>§5.0 현재</th><th>코드 현재</th></tr></thead>
+<tbody>
+<tr><td>타이 부재</td><td>M8 전산볼트 ×2, Ø8 × 397.4 (간격 373.4 + 물림 12×2)</td><td>기본 <code>TIE_KIND="profile"</code> 3030 × 360 + 코너 브래킷 8. <code>rod</code> 옵션은 400 / 탭 15 / 물림 13.3</td></tr>
+<tr><td>탭</td><td>x=±24.3, z=−18.0, 깊이 12</td><td>rod: 깊이 15. profile: 브래킷 탭 x=±22, z=−6/−19, 깊이 12</td></tr>
+<tr><td>"검토했다가 접은 것" 표</td><td>3030 여분 390 ×2 — 접음</td><td>360 으로 잘라 채택, 390 그대로는 §2 미결</td></tr>
+<tr><td>레일 볼트 인발 표</td><td>보수 759 N (51%)</td><td><code>tie_force()</code> 385 N (25.6%) — E 를 강철로 고친 뒤 값</td></tr>
+</tbody>
+</table>
+<p>같은 이유로 <code>FEA.md</code>·<code>README.md</code> 에는 타이가 한 줄도 없다. §2 가 결정되면 한 번에 고친다.</p>
+
+<p><strong>5-2. <code>docs/build-log.md</code> 를 08-10 이후로 잇기.</strong> 1,630줄, 28막 + 29~32절 체제이지만 사건은 08-09 까지다. 31절 "최종 사양"은 <code>cargo 810×610×360, 내부 170L, 벽 5mm</code> 이고 23막은 ㄷ자 마운트를 "3차 (최종)"이라 부른다 — 둘 다 그 뒤 뒤집혔다. 이 일지에만 있고 build-log 에 없는 막:</p>
+<ol>
+<li>08-10~11 적재함 v2~v4 — 높이 360 → 280, 유로 컨테이너 400×300, 적재 170 → 26 L</li>
+<li>08-12 실물 파손 — ㄷ자 팔 800 N 에서 PETG 119%, 손계산에 탑승 하중이 빠져 있었음, 거싯 18%, M6×15 물림 0.6 mm</li>
+<li>08-14~15 <code>hoverboard_mount</code> A/B → C → D → 통짜 D, 참조 3030 단면에 슬롯 없는 면</li>
+<li>08-21 새벽 옆 플랜지 파손·볼트 15 mm·FEA 재실행(45.3 MPa / 0.0582 mm), 젖힘 모멘트 자료</li>
+<li>08-21 새벽 액슬 타이, 휘어짐 기준 3회 정정, 프레임 보요소 해석(구석 865 N)</li>
+<li>08-21~27 봉 400 고정, git, PPS-CF10·알루미늄 프린트 검토, T텅, 여분 3030 타이</li>
+<li>09-10 전체 차량 뷰어, 형상에서 BOM (1,976,478원 / 406 h / 베드 초과 14건)</li>
+</ol>
+<p>이 일지 세트가 그 초안이 된다. build-log 에 옮길 때는 32절 예상 제작비(베이스만 482,000~992,000원, 출력·판재 0원 가정)와 09-10 BOM(필라멘트 값 포함, 적재함 포함)의 기준이 다르다는 것을 명시한다.</p>
+
+<p><strong>5-3. FEA 결과 폴더와 기준값.</strong> <code>run_clamp_fea.py</code> 의 <code>case_name</code> 은 재료·편심·방향만 붙이고 <code>LOW_SIDE</code>·<code>TIE</code>·<code>TIE_KIND</code> 를 안 붙인다. 그래서 같은 이름 폴더가 조건이 바뀔 때마다 덮인다:</p>
+<table>
+<thead><tr><th>폴더</th><th><code>summary.txt</code> 현재 내용</th><th>문서가 인용하는 값</th></tr></thead>
+<tbody>
+<tr><td><code>clamp_800N_h3mm_e55mm_up</code></td><td>플랜지 켬(구멍 6개 고정 1,996 노드) + M8 타이 1,080 노드 — 18.0 MPa / 0.0076 mm, Fy 61 N</td><td><code>CLAUDE.md</code> 기준 45.3 MPa / 0.0582 mm (타이 없음) — 어느 폴더에도 없다</td></tr>
+<tr><td><code>clamp_800N_h4mm_e55mm_up</code></td><td>M8 타이 8 노드 — 90.3 MPa / 0.0372 mm, Fy 553 N</td><td>—</td></tr>
+<tr><td><code>clamp_800N_h3mm_petg_e55mm_up</code></td><td>3030 타이 1,656 노드 — 26.5 MPa / 0.2627 mm, Fy 1,268 N (미커밋 변경)</td><td><code>CLAUDE.md</code> "PETG 45.6 MPa / 1.907 mm" (타이 없음)</td></tr>
+</tbody>
+</table>
+<ul>
+<li>고칠 것: <code>case_name</code> 에 <code>_side</code>/<code>_tie{kind}</code> 접미사를 붙이고, 기준 케이스(타이 없음 <code>TIE=0</code>, AL 3 mm·4 mm)를 다시 돌려 45.3 / 0.0582 가 재현되는지 본다. <code>CLAUDE.md</code> 의 "결과 폴더" 줄도 같이 고친다.</li>
+<li>08-21 02:47 의 타이 노드 선택 버그(정상 10개인데 1,080개 잡힘 — 총강성은 같아 결과는 유효)가 현재 코드에서 고쳐졌는지는 확인하지 못했다. 3 mm 폴더의 1,080 이 그 흔적이다. 재실행 때 "Axle tie: … nodes" 줄이 두 자릿수인지 본다.</li>
+</ul>
+
+<p><strong>5-4. 전체 차량 렌더 1장.</strong> 09-10 의 전체 버전(873 × 612 × 606, 적재함 포함)은 뷰어 스크린샷으로만 봤고 <code>docs/images</code> 에 없다. 있는 <code>47_skid_view_iso.png</code> 는 08-12 판(전폭 712, 적재함 없음)이다. <code>iso_render</code> 로 한 장 굽는다.</p>
+<p>이 구간(09-10 전체 차량)의 렌더는 docs/images 에 없다.</p>
+
+<h3>6. 셸·적재함을 판재로 바꿀 것인가</h3>
+
+<p>09-10 견적에서 돈보다 먼저 걸린 것이 출력 시간 406 h(프린터 한 대로 17일)와 Ender-3 V3 SE 베드(220×220×250) 초과 14건이었다. 적재함 셸 810×510×269 는 24조각이다. 셸 4종을 같은 부피의 벽 두께로 전개해 3 mm 판재로 환산한 표가 <code>docs/bom.md</code> 에 있다 — 확정이 아니라 대안이다.</p>
+
+<table>
+<thead><tr><th>부품</th><th>벽</th><th>전개 면적</th><th>출력</th><th>판재</th><th>출력 시간</th><th>베드 분할</th></tr></thead>
+<tbody>
+<tr><td>외장셸 ×2</td><td>3 mm</td><td>0.73 m²</td><td>82,963원</td><td>34,840원</td><td>60 h</td><td>각 12조각</td></tr>
+<tr><td>적재함 셸</td><td>5 mm</td><td>1.04 m²</td><td>197,316원</td><td>49,717원</td><td>144 h</td><td>24조각</td></tr>
+<tr><td>장비베이 지붕</td><td>5 mm</td><td>0.43 m²</td><td>82,199원</td><td>20,712원</td><td>60 h</td><td>12조각</td></tr>
+<tr><td>뚜껑</td><td>3 mm</td><td>0.53 m²</td><td>60,715원</td><td>25,497원</td><td>44 h</td><td>6조각</td></tr>
+<tr><td><strong>합계</strong></td><td></td><td></td><td><strong>423,193원</strong></td><td><strong>130,766원</strong></td><td><strong>309 h</strong></td><td></td></tr>
+</tbody>
+</table>
+
+<p>판재로 가면 추가 지출 1,504,638 → 1,212,211원, 출력 시간 76% 감소. 대신 재단·굽힘 공수와 이음 철물이 붙는데 그 값은 아직 없다. 결정하려면: ① 판재 재질·두께 확정(PC/ABS 3 mm 는 가정), ② 어깨 라운드 R55 를 절곡으로 낼 수 있는지 아니면 코너만 프린트하고 평면부만 판재로 갈지(07-30 "하이브리드" 안, 08-01 "평면부를 3 mm PC 판재로" 안이 같은 발상), ③ 절곡·재단 견적 1건. 결정하면 <code>docs/bom.md</code> 에 공수·철물 행을 넣고 <code>swerve_base.py</code> 의 셸 그룹을 판재 전개 기준으로 바꿔야 한다. 07-29 의 "적재함 17 kg" 문제도 여기서 같이 풀린다.</p>
+<p>이 구간(현재 적재함 셸 810×510×269)의 렌더는 docs/images 에 없다.</p>
+
+<p>같은 셸 묶음에서 아직 안 한 것: 핸들 탈착식(전폭 712 → 610, 법규 여유 88 → 190 mm — 09-15 현재 미반영), 가스 스트럿 위치·용량 재검토(뚜껑 1,959 → 1,594 cm³), 옆 수납 120×522×2 용도, 타이다운 주석 정리. 셸 휠아치는 <code>swerve_base.py</code> 에 <code>COMPACT_SHELL</code>(<code>SHELL_Y &lt; 280</code>) 조건의 원통 커터(<code>WHEEL_ARCH_CLR=12</code>)가 있고 통합 스크립트는 <code>SHELL_Y=255</code> 라 켜지지만, 실행 출력은 지금도 "바퀴가 레일 윗면보다 34.8 mm 솟는다 → 셸 휠아치 필요"를 찍는다. 커터가 실제로 타이어를 비우는지 렌더로 확인한 기록은 없다 — 확실하지 않다.</p>
+
+<h3>7. T텅 — 켜지 않는 이유와 그 전에 할 일</h3>
+
+<p>08-24 01:14 사용자 제안.</p>
+<blockquote>맞닿는 부분을 t너트처럼 해서 슬라이드처럼 끼워서 넣을 수 있게 하는거야</blockquote>
+<p>인발 파괴는 너트가 아니라 슬롯 립이 벌어지는 것이라, 클램프 몸체가 직접 립을 물면 물림이 너트 10~16 mm 에서 다리당 텅 10 mm × 4 = 40 mm 로 늘어 인발 용량 933 → 6,528 N(사용률 41% → 5.9%)이 된다. <code>TONGUE=1</code> 환경변수로 켜며 기본은 꺼짐이다. 대가는 다리 24 → 40, 전폭 92.7 → 124.7(+35%), 116.1 → 178.8 cm³(+54%), 알루미늄 314 → 483 g. 레일 끝에서 밀어 끼워야 하므로 프레임 조립 전에 넣는다.</p>
+<ul>
+<li><strong>오버행.</strong> 텅 머리 밑면 4.1 mm 가 90° 오버행이라 FDM 으로는 하중을 받는 그 면이 처진다. 45° 챔퍼로 자립시키면 쐐기가 되어 립을 벌리는 방향이라 역효과다. 그래서 PLA 에서는 켜지 않는다. 알루미늄 CNC 면 오버행 문제가 없다.</li>
+<li><strong>효과는 재료에 따라 갈린다.</strong> PLA 는 클램프 변형 0.160 + 조인트 0.016 에서 조인트만 0.001 로 줄어 8% 개선 — 54% 커지는 값을 못 한다. 알루미늄은 0.008 + 0.016 → 0.009 로 2.7배.</li>
+<li><strong>지금 할 수 있는 것은 §3-3 실물 슬롯 실측뿐이다.</strong> 461.6 mm³ 간섭이 참조 단면 단순화(0.20 mm)라는 판단을 확정해 둔다. 알루미늄으로 갈 때 <code>TONGUE=1</code> 로 STEP 을 뽑고 FEA 를 한 번 더 돌린다.</li>
+</ul>
+
+<h3>8. 미커밋 변경과 저장소 정리</h3>
+
+<p>git 은 08-21 08:12 커밋 <code>14fb653</code> 하나뿐이고 원격이 없다. 09-15 <code>git status</code>:</p>
+<table>
+<thead><tr><th>묶음</th><th>파일</th><th>처리</th></tr></thead>
+<tbody>
+<tr><td>모빌리티 — 코드 (M 6)</td><td><code>hoverboard_mount/parameters.py</code>(T텅·<code>TIE_KIND</code>), <code>low_clamp.py</code>(+93줄: 텅, <code>tie_brackets</code>), <code>run_clamp_fea.py</code>(프로파일 타이 스프링), <code>vehicle_integration.py</code>, <code>vehicle_shell_integration.py</code>(볼트 길이 파라미터화, <code>axle_ties</code>), <code>output/step/low_clamp_design_d.step</code></td><td>§2 결정 뒤 한 커밋. 결정 전이면 "타이 profile 옵션 + 텅 옵션, 길이 미결" 이라고 메시지에 적고 커밋해도 된다 — 미커밋 상태로 25일 지났다</td></tr>
+<tr><td>모빌리티 — FEA 산출물 (M 2)</td><td><code>clamp_800N_h3mm_petg_e55mm_up/summary.txt</code>, <code>stress_deformed_800N.png</code> (3030 타이 실행으로 덮임)</td><td>§5-3 폴더 이름 고친 뒤 재실행해서 넣는 편이 낫다. 지금 커밋하면 "PETG 기준값" 폴더가 타이 케이스로 굳는다</td></tr>
+<tr><td>모빌리티 — 새 파일 (?? 3)</td><td><code>docs/bom.md</code>, <code>docs/bom.csv</code>, <code>tools/bom/</code></td><td>위 코드와 같은 커밋 (BOM 절단 행이 360 전제)</td></tr>
+<tr><td>일지 도구 (?? 1)</td><td><code>tools/trilium/push_journal.py</code></td><td><code>docs/journal/</code>(manifest + HTML)이 생기면 함께 커밋</td></tr>
+<tr><td>무관 프로젝트 (?? 11 폴더 + 1)</td><td><code>models/card_press, card_stamper, galaxy_watch4_classic, nfc_turntable, nfc_turntable_mini, phone_tablet, pillbox_cassette, pillbox_roll, pillbox_v54, pouch_dispenser, power_button</code>, <code>tools/fbxread.py</code></td><td>각각 따로 커밋. 이 문서 범위 밖</td></tr>
+<tr><td>설정·로그 (M 2, ?? 4)</td><td><code>.claude/launch.json</code>(ocp-viewer 항목이 pouch-dispenser-web 으로 바뀜), <code>ocp-viewer-stdout.log</code>(추적 중), <code>ocp-viewer-{cassette,mini,pillbox,roll}.log</code></td><td><code>.gitignore</code> 의 <code>**/ocp-vscode-*.log</code> 는 이 이름들을 못 잡는다. <code>ocp-viewer-*.log</code> 를 추가하고 추적 중인 로그는 <code>git rm --cached</code>. launch.json 은 ocp-viewer 항목을 되살리거나 둘 다 둔다</td></tr>
+</tbody>
+</table>
+<ul>
+<li><code>.git</code> 은 192 MB, 느슨한 객체 515개 190.49 MiB, 팩 0. 08-21 에 617 MB 를 스테이징했다가 reset 한 잔재로 보이지만 청크에 그 설명은 없다 — 확실하지 않다. <code>git gc --prune=now</code> 로 줄어드는지 보면 된다. 커밋이 하나뿐이라 잃을 것은 없다.</li>
+<li>원격이 없다. 로컬 디스크 하나에 51일치가 있다. 백업 경로(원격 또는 다른 드라이브 bare clone)를 정한다. git LFS 는 검토하지 않았다.</li>
+</ul>
+
+<h3>9. 그 밖의 오래된 미결 (낮은 우선순위)</h3>
+
+<table>
+<thead><tr><th>항목</th><th>처음 남긴 날</th><th>현재</th><th>무엇을 하면 되나</th></tr></thead>
+<tbody>
+<tr><td>배터리 실물 치수</td><td>07-27</td><td><code>swerve_base.py</code> <code>BATT = (200, 150, 90)</code> [추정] 그대로. 무게중심이 여기 걸려 있다</td><td>캘리퍼 3치수 + 무게</td></tr>
+<tr><td>무게중심 실측 → 축간 420 확정</td><td>08-01, 08-07</td><td>축간 420, 계산값 89 kg / CG 357 은 스워브 시절 값. 스키드 전환·모듈 제거 후 재계산 기록 없음</td><td>4륜 각각 저울에 올려 바퀴 하중 4개 읽기. 프레임 해석의 중앙 케이스 267~275 N 과 대조</td></tr>
+<tr><td>허브모터 축 온도, 측면 충격력</td><td>08-07</td><td>기록 없음</td><td>주행 후 축 온도 1회, PETG 여유 20°C 확인. 충격은 "굴려봐야 안다"</td></tr>
+<tr><td>전자·제어 495,000원 / 센서·표시 382,000원</td><td>09-10</td><td>대부분 [추정] 단가</td><td>실제 견적으로 <code>tools/bom/bom.py</code> PRICE 표만 고친다</td></tr>
+<tr><td>Trilium ETAPI 토큰</td><td>09-15</td><td>서버 37840 응답, <code>/etapi/app-info</code> 401. <code>~/.trilium-etapi-token</code> 없음, <code>docs/journal/</code> 없음</td><td>Trilium 옵션 → ETAPI → 토큰 발급 → 파일에 한 줄. 이 일지 시리즈를 <code>docs/journal/manifest.json</code> 으로 묶어 <code>push_journal.py --dry-run</code></td></tr>
+<tr><td>스프링너트 수량 여유, 프로파일 390 5개 구매 여부</td><td>08-01, 08-21</td><td>실물 재고에 달려 저장소로 확인 불가</td><td>§2 와 함께 실물 세기</td></tr>
+<tr><td>서스펜션</td><td>08-21</td><td>미룸. 우레탄 패드 3~5 mm 안, 진짜는 트레일링 암 자리</td><td>다이얼 게이지 실측 뒤 잔진동이 문제면 패드부터</td></tr>
+</tbody>
+</table>
+
+<h3>다음 2주 순서 (제안)</h3>
+<ol>
+<li>실물 앞에서 30분: 여분 390 개수, 상부 클램프를 30 mm 자리에 대보기, 스프링너트 두께 → <strong>§2 결정</strong>.</li>
+<li>스프링너트 인발 실측 (§3-1). 결과를 <code>parameters.py</code> 에 넣는다.</li>
+<li>결정에 맞춰 STEP/STL 재생성, FEA 3·4 mm, 폴더 이름 접미사(§5-3) 같이 고치기.</li>
+<li>철물 4,240원 주문, 클램프 4 + 브래킷 8 출력 (약 14 h).</li>
+<li>조립 후 다이얼 게이지 실측 (§3-2). 예측 −0.014~−0.024 mm.</li>
+<li>인수인계 §5.0, <code>build-log.md</code> 를 08-10 이후로 잇기(이 일지 세트가 초안, 7개 막), BOM 갱신 → 커밋 → 백업.</li>
+<li>판재 전환 견적 1건 받아 §6 결정.</li>
+</ol>
+
+<h3>교훈</h3>
+<ul>
+<li>"문서 갱신했다"와 문서가 갱신된 것은 다르다. §5.0 의 397.4 는 코드에서 사라진 지 25일이 지났고, build-log 는 최종 사양이 두 번 뒤집힌 뒤에도 "최종"이라 적혀 있다. 코드를 바꾼 커밋에 문서를 같이 넣지 않으면 이렇게 된다.</li>
+<li>미결 하나가 뒤의 다섯을 막는다. 360 vs 390 은 성능 차이 1% 대의 사소한 결정인데, 결정하지 않아서 재출력·FEA·BOM·커밋이 25일 멈췄다. 사소한 결정일수록 빨리 한다.</li>
+<li>안 잰 값은 언제나 병목 자리에 있다. 스프링너트 인발 1,500 N 은 세 구간에서 "유일하게 안 잰 값"으로 반복됐고, 재는 데 드는 것은 프로파일 토막과 저울뿐이다.</li>
+<li>결과 폴더는 조건이 바뀌면 덮인다. 인용할 값은 폴더가 아니라 문서에 조건과 함께 적고, 폴더 이름에 조건을 넣는다.</li>
+<li>미커밋 상태로 오래 두면 무관한 작업(다른 프로젝트 11개)과 섞인다. 커밋 단위는 "결정이 나면"이 아니라 "옵션이 생기면"으로 잡아도 된다 — 미결은 메시지에 적으면 된다.</li>
+</ul>

@@ -42,6 +42,9 @@ models/hoverboard_mount/output/fea/**/*.log
 # 개인 설정 (권한 허용 목록 등)
 .claude/settings.local.json
 
+# 개인 메모 앱 (Trilium) 연동 스크립트 — 저장소에 담지 않는다
+tools/trilium/
+
 # 웹 시뮬레이터 메시 (7 MB) — models/manuel_1_0/web_export.py 로 다시 만든다
 models/manuel_1_0/web/data/
 cadview/
