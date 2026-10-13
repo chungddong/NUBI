@@ -7,3 +7,7 @@ __pycache__/
 
 # Wi-Fi password (copy include/wifi_config.example.h)
 include/wifi_config.h
+
+# GPL-3.0 원본은 저장소에 넣지 않는다 (로컬 사본은 firmware/hoverboard-mainboard/local/upstream-examples/)
+include/hoverserial.h
+include/util.h

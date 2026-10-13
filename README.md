@@ -180,22 +180,22 @@ copy include\wifi_config.example.h include\wifi_config.h
 
 AI 에이전트(Claude Code, Codex)용 규칙은 [AGENTS.md](AGENTS.md)에 있습니다.
 
-## 출처와 라이선스
+## 라이선스와 출처
 
 이 저장소는 2026-10-13에 개인 저장소 두 곳, 바퀴 제어기(`lolind32-wheel`)와 차체 설계(`HoverboardVehicle`)를
 커밋 이력째 합쳐 만들었습니다. 통합 전 이력은 `git log 3cca93e^2`(바퀴 제어기)와 `git log 02f205d^2`(차체
 설계)로 볼 수 있습니다.
 
-외부에서 가져온 코드는 아래와 같고, 원래의 라이선스를 따릅니다.
-
-| 대상 | 출처 |
-| --- | --- |
-| `firmware/wheel-controller/include/hoverserial.h`, `util.h` | [RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32) (GPL-3.0)에서 그대로 복사 |
-
-모터 보드(호버보드 메인보드)에는 같은 프로젝트(GPL-3.0)를 고친 펌웨어를 올려 쓰지만, 그 펌웨어는 이 저장소에
-넣지 않고 따로 관리합니다. 메인보드는 나중에 다른 모터 드라이버로 바뀔 수 있습니다.
+이 저장소에는 외부 코드가 들어 있지 않습니다. 바퀴 제어기가 모터 보드와 주고받는 프레임 형식은
+[RoboDurden/Hoverboard-Firmware-Hack-Gen2.x](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x)의 UART
+프로토콜을 따르지만, 그 코드를 쓰지 않고 형식만 보고 새로 작성했습니다
+([include/hover_protocol.h](firmware/wheel-controller/include/hover_protocol.h)). 모터 보드(호버보드 메인보드)에 올리는
+펌웨어는 그 프로젝트(GPL-3.0)를 고친 것이라 이 저장소에 넣지 않고 따로 관리합니다. 메인보드는 나중에 다른 모터
+드라이버로 바뀔 수 있습니다.
 
 재배포 조건을 확인하지 못한 외부 자료는 저장소에 넣지 않았습니다. 차체를 다시 지으려면 호버보드 6.5" 휠 모터
 STEP을 따로 받아야 합니다([hardware/vehicle/refmodel/](hardware/vehicle/refmodel/README.md)).
 
-이 저장소 자체의 라이선스는 아직 정하지 않았습니다.
+웹 시뮬레이터는 실행할 때 three.js와 three-mesh-bvh(둘 다 MIT)를 CDN에서 불러옵니다.
+
+누비의 코드, 설계, 문서는 [MIT 라이선스](LICENSE)로 공개합니다.

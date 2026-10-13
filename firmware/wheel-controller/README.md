@@ -128,8 +128,9 @@ prebuilt `2.1.8 master uart.bin`; this firmware now expects the
 — why is in [ADR 0001](../../docs/decisions/0001-wheel-board-pairing.md). The slaves run a build from the same
 source. The mainboard firmware itself is GPL-3.0-derived and managed outside this repository; the boards may
 be swapped for a different motor driver later, so this README only records what the ESP32 relies on.
-`include/hoverserial.h` and `include/util.h` are copied verbatim from the -GD32
-repo's `PlatformIO Examples/TestSpeed/` (GPL-3.0).
+The frame code ([include/hover_protocol.h](include/hover_protocol.h)) is NUBI's own, written from the frame layout
+below; it checks the frame sizes, field offsets and the CRC check value at compile time. Until 2026-10-13 this
+firmware used two headers copied from the -GD32 repo's examples (GPL-3.0); they are no longer part of it.
 
 | | |
 | --- | --- |
@@ -459,8 +460,8 @@ current drops from ~21 A to ~8 A, and heating goes with its square.
 Two things will need real work:
 
 - **Protocol changes.** Four motors means `REMOTE_UARTBUS` — one bus, several
-  boards addressed by `iSlave`. Different command and feedback structs (both
-  already present in `include/hoverserial.h` behind `#ifdef REMOTE_UARTBUS`),
+  boards addressed by `iSlave`. Different command and feedback structs (defined
+  by the upstream firmware's UARTBUS mode, not implemented here),
   different mainboard binaries, and the boards stop providing pull-ups, so the
   ESP32 must. Upstream has an `Arduino Examples/Test_4Wheeler` sketch.
 - **Wheels fighting each other.** On a rigid frame the ground forces all four to

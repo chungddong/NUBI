@@ -34,16 +34,13 @@
 // serial commands and has its own always-armed watchdog -- see the
 // "WiFi hotspot" section below. Serial control keeps working alongside it.
 
-#define _DEBUG
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
 
-#include "util.h"
-#include "hoverserial.h"
+#include "hover_protocol.h"
 
 // Two masters, one per link: link A is the front axle, link B the rear.
 // Plain-UART masters all talk unprompted at ~10 Hz, so they cannot share a
@@ -102,8 +99,8 @@ static const uint32_t HOST_TIMEOUT_MS = 1000;  // host silence that cuts it, if 
 
 HardwareSerial oSerialHover(2);   // link A (master 1)
 HardwareSerial oSerialHover2(1);  // link B (master 2)
-SerialHover2Server oFb;
-SerialHover2Server oFb2;
+HoverFeedback oFb;
+HoverFeedback oFb2;
 
 static int iMaxCmd = MAX_CMD_BOOT;
 static int iSpeedTarget = 0, iSteerTarget = 0;
@@ -632,7 +629,7 @@ static void DumpTxFrame() {
   delay(80);
 
   Serial.printf("  tx frame on the wire (%u bytes expected):",
-                (unsigned)sizeof(SerialServer2Hover));
+                (unsigned)sizeof(HoverCommand));
   int n = 0;
   while (oSerialHover.available()) {
     Serial.printf(" %02X", oSerialHover.read());
@@ -894,8 +891,8 @@ void setup() {
   Help();
   Serial.println(F("wheel off the ground before you touch 's'."));
 
-  HoverSetupEsp32(oSerialHover, (int)BAUDRATE, PIN_RX, PIN_TX);
-  HoverSetupEsp32(oSerialHover2, (int)BAUDRATE, PIN_RX2, PIN_TX2);
+  HoverBegin(oSerialHover, BAUDRATE, PIN_RX, PIN_TX);
+  HoverBegin(oSerialHover2, BAUDRATE, PIN_RX2, PIN_TX2);
   pinMode(LED_BUILTIN, OUTPUT);
 
   WebSetup();
@@ -910,11 +907,11 @@ void loop() {
   oDns.processNextRequest();
   oWeb.handleClient();
 
-  while (Receive(oSerialHover, oFb)) {
+  while (HoverReceive(oSerialHover, oFb)) {
     iRxFrames++;
     iLastRxAt = iNow;
   }
-  while (Receive(oSerialHover2, oFb2)) {
+  while (HoverReceive(oSerialHover2, oFb2)) {
     iRxFrames2++;
     iLastRxAt2 = iNow;
   }
