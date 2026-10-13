@@ -46,4 +46,6 @@
   갱신합니다.
 - 이 저장소 밖의 파일(`F:\Develop\`의 다른 폴더, Jetson · RDK 보드)을 옮기거나 지울 때는 먼저
   사용자에게 확인합니다.
+- 이 저장소는 아직 비공개입니다. 원격을 붙이거나 푸시하기 전에
+  [docs/guides/before-publishing.md](docs/guides/before-publishing.md)를 끝까지 따릅니다(라이선스, 이력 정리).
 - `F:\Develop\freecadAI`의 av-platform CAD는 쓰지 않기로 했습니다. 참고하거나 가져오지 않습니다.
