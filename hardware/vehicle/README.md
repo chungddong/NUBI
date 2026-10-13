@@ -1,7 +1,7 @@
 # HoverboardVehicle — 호버보드 허브모터 4 륜 자율주행 차량
 
-> 누비의 차체 설계 작업 공간입니다. 2026-10-13에 [HoverboardVehicle](https://github.com/chungddong/HoverboardVehicle)
-> 저장소를 커밋 이력째 이 폴더로 옮겼습니다. 스크립트가 자기 파일 위치를 기준으로 경로를 잡기 때문에
+> 누비의 차체 설계 작업 공간입니다. 2026-10-13에 개인 저장소였던 `HoverboardVehicle`을
+> 커밋 이력째 이 폴더로 옮겼습니다. 스크립트가 자기 파일 위치를 기준으로 경로를 잡기 때문에
 > 안쪽 구조는 그대로 두었고, 아래 명령은 모두 **이 폴더(`hardware/vehicle/`)에서** 실행합니다.
 > 이후 작업 일지는 저장소 공통 [docs/worklog/](../../docs/worklog/)에 씁니다. 시스템 전체에서의 위치는
 > [system-overview.md](../../docs/architecture/system-overview.md)에 있습니다.

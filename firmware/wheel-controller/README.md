@@ -1,7 +1,7 @@
 # wheel-controller (lolind32-wheel)
 
-> 누비의 바퀴 제어기 펌웨어입니다. 2026-10-13에 [lolind32-wheel](https://github.com/chungddong/lolind32-wheel)
-> 저장소를 커밋 이력째 이 폴더로 옮겼습니다. 작업 일지와 디버깅 기록은 저장소 공통
+> 누비의 바퀴 제어기 펌웨어입니다. 2026-10-13에 개인 저장소였던 `lolind32-wheel`을
+> 커밋 이력째 이 폴더로 옮겼습니다. 작업 일지와 디버깅 기록은 저장소 공통
 > [docs/worklog/](../../docs/worklog/README.md)로 옮겼고, 시스템 전체에서의 위치는
 > [system-overview.md](../../docs/architecture/system-overview.md)에 있습니다.
 
