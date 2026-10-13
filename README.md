@@ -7,7 +7,8 @@ Status: link verified in both directions, motor runs under command, GUI control
 panel working, on-board Wi-Fi hotspot with a captive-portal control page.
 Tank drive (one master per wheel, mixing on the ESP32) is implemented but not
 yet driven on the ground — see [Drive modes](#drive-modes). [WORKLOG.md](WORKLOG.md) is the
-dated record of each working session and its open issues. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
+dated journal of each working session, and [ISSUES.md](ISSUES.md) tracks the open
+issues and what to do next. [DEBUGGING.md](DEBUGGING.md) records how it got there, including
 the wrong turns — worth reading before adding a new diagnostic, since most of
 the lost time came from measurement mistakes rather than hardware.
 
