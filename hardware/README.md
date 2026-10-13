@@ -2,24 +2,40 @@
 
 ```
 hardware/
-├── mechanical/
-│   ├── cad/        CAD 원본 (.FCStd, .f3d 등)
-│   ├── scripts/    파라메트릭 빌더 스크립트 (FreeCAD, build123d)
-│   ├── vendor/     벤더가 배포한 부품 STEP (모터, 센서, 보드)
-│   └── exports/    내보낸 파일 (STEP, STL, 3MF, 렌더 이미지)
-├── electrical/     배선도, 핀맵, 전원 계통도
-└── bom/            부품 목록 (CSV)
+├── vehicle/        차체 설계 작업 공간 (구 HoverboardVehicle 저장소)
+└── electrical/     차체 모델 밖의 전장 문서 (보드별 핀맵, 회로도)
 ```
 
-## 규칙
+## vehicle/ — 차체 설계
 
-- **좌표계** — x 전진, y 왼쪽, z 위, 지면 z = 0 (ROS REP-103과 같은 방향). 단위는 mm.
-  나중에 URDF로 옮길 때 축을 다시 맞추지 않아도 되도록 처음부터 통일합니다.
-- **원본과 산출물 분리** — 스크립트로 다시 만들 수 있는 파일은 `exports/`에 두고, 손으로 만든
-  원본만 `cad/`에 둡니다. 빌더 스크립트는 상단에 치수 파라미터를 모아 둡니다.
-- **벤더 파일** — `vendor/`에 넣을 때는 받은 곳과 날짜를 `vendor/README.md`에 적습니다.
-- **BOM** — `bom/`에 CSV로 둡니다. 열: 부품명, 사양, 수량, 단가, 구매처, 링크, 비고.
-- **핀맵** — 보드별로 `electrical/<보드>-pinout.md`. 펌웨어 코드의 핀 상수와 어긋나면 안 되므로,
-  핀을 바꾸면 펌웨어 쪽과 같은 커밋에서 고칩니다.
+호버보드 6.5" 허브모터 4개로 움직이는 스키드 스티어 차체를 Python(build123d) 코드로 설계한 작업 공간입니다.
+2026-07-27 첫 설계부터의 기록이 모두 들어 있습니다. 시작점은 [vehicle/README.md](vehicle/README.md)입니다.
 
-FreeCAD 백업 파일(`*.FCBak`, `*.FCStd1`)은 git에 올리지 않습니다.
+| 위치 | 내용 |
+| --- | --- |
+| [vehicle/models/vehicle/](vehicle/models/vehicle/README.md) | 차체 재설계 v00 ~ v29. 버전마다 폴더 하나 (코드 · 이미지 · BOM · README) |
+| [vehicle/models/vehicle/DECISIONS.md](vehicle/models/vehicle/DECISIONS.md) | 차체 설계 결정 D-01 ~ D-21 (센서, 모터 드라이버, 배터리, 비상정지, 배선 …) |
+| [vehicle/models/vehicle/research/](vehicle/models/vehicle/research/) | 부품 조사 원자료 (국내 구매처 · 가격) |
+| [vehicle/models/vehicle/sim/](vehicle/models/vehicle/sim/README.md) | 웹 시뮬레이터 (three.js) — 주행, 센서 시야, 전원, 사각지대, 전복, 비상정지, 자율주행, 복도 |
+| [vehicle/models/hoverboard_mount/](vehicle/models/hoverboard_mount/) | 재설계 전 단계: 휠 마운트, 하부 클램프 Design D, 구조해석(FEA), 제작용 STEP · STL · DXF |
+| [vehicle/docs/](vehicle/docs/) | 설계 일지(2026-07 ~ 09), 설계 기록, 이미지 |
+
+**규칙은 [vehicle/CLAUDE.md](vehicle/CLAUDE.md)를 따릅니다.** 요점만 옮기면:
+
+- 명령은 `hardware/vehicle/`에서 실행합니다. 스크립트가 자기 파일 위치를 기준으로 경로를 잡으므로
+  안쪽 폴더 구조를 바꾸지 않습니다.
+- 버전 = 폴더. 기록을 마친 버전은 고치지 않고 다음 버전에서 고칩니다.
+- 차체 설계 결정은 `DECISIONS.md`에 D-NN으로 남깁니다.
+- 부품은 국내 구매처만 씁니다 (D-08).
+- 좌표: 지면 z = 0, +x 전진, +y 왼쪽, +z 위, 단위 mm, 차량 중심 x = y = 0.
+
+개발 환경(Python 3.12 + build123d)은 [vehicle/SETUP.md](vehicle/SETUP.md)대로 `hardware/vehicle/.venv`에 만듭니다.
+
+## electrical/
+
+차체 모델에 이미 들어간 배선(v28 · v29)과 BOM(버전 폴더의 `bom.md`)은 vehicle/에 있습니다. 여기에는 그 밖의
+전장 문서를 둡니다.
+
+- **핀맵** — 보드별로 `<보드>-pinout.md`. 펌웨어 코드의 핀 상수와 어긋나면 안 되므로, 핀을 바꾸면 펌웨어
+  쪽과 같은 커밋에서 고칩니다.
+- **회로도** — 비상정지 루프, 전원 분기 등 3D 모델로는 보기 어려운 것.

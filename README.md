@@ -12,29 +12,46 @@
 ## 시스템 구성
 
 ```
-상위 컴퓨터   Jetson Orin Nano / RDK 보드 — 인식 · 판단 · 경로 계획
+상위 컴퓨터   Jetson Orin Nano — 인식 · 판단 · 경로 계획
    │  USB 시리얼 115200, 텍스트 명령 (s / t / x / m / w / h …)
    ▼
 바퀴 제어기   LOLIN D32 (ESP32) — 안전장치 · 좌우 믹싱 · Wi-Fi 조종 페이지
-   │  UART 19200 8N1, 명령 9 B / 텔레메트리 22 B, CRC16-XMODEM
+   │  UART 19200 8N1 ×2 (앞축 · 뒤축), 명령 9 B / 텔레메트리 22 B, CRC16-XMODEM
    ▼
-모터 보드     호버보드 GD32 메인보드 (RoboDurden Hoverboard-Firmware-Hack-Gen2.x)
+모터 보드     호버보드 2세대 분리형 보드 ×4 (RoboDurden Hoverboard-Firmware-Hack-Gen2.x)
    │  3상 + 홀센서
    ▼
-구동         6.5" BLDC 허브모터
+구동         6.5" BLDC 허브모터 ×4, 스키드 스티어
 ```
 
-계층별 책임과 인터페이스는
+센서는 차체 설계 기준으로 뎁스 카메라 Orbbec Gemini 336 ×2(앞 · 뒤), 2D 라이다 LDROBOT STL-19P,
+IMU iAHRS, GNSS GPS630입니다. 전원은 36 V 20 Ah 배터리이고, 비상정지 버튼은 DC 컨택터로 바퀴 쪽
+전원만 끊습니다. 계층별 책임과 인터페이스, 각 부품을 고른 이유는
 [docs/architecture/system-overview.md](docs/architecture/system-overview.md)에 정리했습니다.
 
 ## 현재 상태 (2026-10-13)
 
 | 영역 | 상태 |
 | --- | --- |
-| 기구 | 호버보드 허브모터 4륜 시제품 프레임 조립됨. CAD는 이 저장소에서 새로 시작 |
-| 바퀴 제어 | ESP32 펌웨어 동작. 보드 모드로 4륜 회전 확인, 탱크 모드는 구현만 하고 지상 주행 전 |
+| 차체 설계 | v28(내부 배선 90가닥)까지 검증 · 기록 완료. BOM 중 단가 확인된 합 약 264만 원(미확인 38줄). v29(배선을 바닥판 위 직각 경로로) 진행 중 |
+| 시제품 | 호버보드 허브모터 4륜 프레임 조립됨 |
+| 바퀴 제어 | ESP32 펌웨어 동작. 보드 모드로 4륜 회전 확인(바퀴 띄움). 탱크 모드는 구현만 하고 지상 주행 전 |
+| 시뮬레이터 | 웹 시뮬레이터로 주행 · 센서 사각지대 · 전복 · 비상정지 방식 · 자율주행(복도 27 m 주행)까지 추정 |
 | 상위 제어 | 깊이 카메라 장애물 가드(RDK), 초파리 전뇌 시뮬레이션 폐루프 주행(Jetson, 바퀴 띄움) 실험 |
-| 자율주행 | SLAM · 내비게이션은 이 저장소에서 새로 시작 |
+| 자율주행 (실기) | ROS 2 · SLAM · 내비게이션은 이 저장소에서 새로 시작 |
+
+## 지금까지의 흐름
+
+| 날짜 | 무엇 | 기록 |
+| --- | --- | --- |
+| 2026-07-27 ~ 28 | 첫 설계. 알루미늄 프로파일 프레임, 구동계 검토 끝에 호버보드 6.5" 허브모터로 정함 | [설계 일지](hardware/vehicle/docs/journal/) |
+| 07-28 ~ 08-05 | 스워브(조향 바퀴) 구동을 검토하다 접고, 고정 브라켓 + 3030 프로파일로 | 설계 일지 |
+| 08-07 ~ 08-27 | 휠 마운트 제작. 실물 PETG 브라켓 파손 분석(08-12) → 하부 클램프 Design D, FEA 파이프라인 | [FEA.md](hardware/vehicle/models/hoverboard_mount/FEA.md) |
+| 08-09 | 바퀴 제어기(ESP32) 첫 커밋. 호버보드 메인보드 UART 링크 | [WORKLOG](firmware/wheel-controller/WORKLOG.md) |
+| 09-10 ~ 09-15 | 전체 차량 뷰어, 형상 기반 BOM | 설계 일지 |
+| 09-17 ~ 09-22 | 탱크 모드 · 데드밴드, RDK 장애물 가드, Jetson 초파리 뇌 폐루프 주행, 메인보드 커스텀 펌웨어 | WORKLOG |
+| 10-04 ~ 10-05 | 차체 재설계 v01 ~ v29: 실외 외관, 실부품 선정(D-01 ~ D-21), 웹 시뮬레이터, 내부 배선 | [차체 버전 표](hardware/vehicle/models/vehicle/README.md) |
+| 10-13 | 누비 통합 저장소 | [작업 기록](docs/worklog/2026-10.md) |
 
 ## 저장소 구조
 
@@ -49,15 +66,15 @@ NUBI/
 │   ├── references/        데이터시트, 외부 자료 정리
 │   └── assets/            문서용 이미지 · 다이어그램
 ├── hardware/              기구 · 전장 설계
-│   ├── mechanical/        CAD 원본, 빌더 스크립트, 벤더 STEP, 내보낸 파일
-│   ├── electrical/        배선도, 핀맵, 전원 계통
-│   └── bom/               부품 목록
+│   ├── vehicle/           차체 설계 작업 공간 — build123d 버전 v00~v29, 결정 기록,
+│   │                      웹 시뮬레이터, FEA, 설계 일지 (구 HoverboardVehicle)
+│   └── electrical/        차체 모델 밖의 전장 문서 (핀맵, 회로도)
 ├── firmware/              MCU 펌웨어
 │   ├── wheel-controller/      LOLIN D32 (ESP32) 바퀴 제어기
 │   └── hoverboard-mainboard/  호버보드 GD32 메인보드 빌드 설정
 ├── software/              상위 컴퓨터 소프트웨어
 │   └── ros2_ws/           ROS 2 Humble 워크스페이스
-├── sim/                   시뮬레이션 (월드, 시나리오)
+├── sim/                   ROS 2용 시뮬레이션 (차체 웹 시뮬레이터는 hardware/vehicle 안)
 ├── tools/                 PC 쪽 개발 · 분석 도구
 ├── data/                  데이터 — 원본은 git에 올리지 않음
 │   ├── raw/               센서 원본 (rosbag, 이미지)
@@ -81,15 +98,25 @@ NUBI/
 
 | 기존 위치 | 내용 | 옮길 곳 | 상태 |
 | --- | --- | --- | --- |
-| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · WORKLOG · ISSUES · DEBUGGING | [firmware/wheel-controller/](firmware/wheel-controller/) | **완료** (2026-10-13, `git subtree`로 커밋 이력 포함) |
+| `F:\Develop\HoverboardVehicle\` ([GitHub](https://github.com/chungddong/HoverboardVehicle)) | 차체 설계 v00 ~ v29, 결정 기록, 부품 조사, 웹 시뮬레이터, FEA, 설계 일지(2026-07 ~) | [hardware/vehicle/](hardware/vehicle/) | **완료** (2026-10-13, 커밋 이력 포함) |
+| `F:\Develop\lolind32-wheel\` ([GitHub](https://github.com/chungddong/lolind32-wheel)) | ESP32 바퀴 제어 펌웨어, PC 도구, README · WORKLOG · ISSUES · DEBUGGING | [firmware/wheel-controller/](firmware/wheel-controller/) | **완료** (2026-10-13, 커밋 이력 포함) |
 | 이전 세션 스크래치패드 `mainboard-out/` | GD32 커스텀 빌드 (bin 2개, `config.master.h`, `config.slave.h`, 패치) | `firmware/hoverboard-mainboard/` | 폴더가 비어 있음. 채팅 첨부본을 찾거나 재빌드 ([ISSUES H1](firmware/wheel-controller/ISSUES.md)) |
 | RDK 보드 "sunrise" `~/Develop/autocar` | 깊이 카메라 장애물 가드 (`guard.py`, `obstacle.py`, `hoverlink.py`) | `experiments/2026-09-17_depth-guard/` | 보드에서 가져와야 함 |
 | Jetson "dongki" `~/Study/flysim` | 초파리 전뇌 폐루프 주행, `hover_link.py`, 웹 UI | `experiments/2026-09-18_flysim-drive/` | 보드에서 가져와야 함 |
 
-`lolind32-wheel`은 커밋 이력째 가져왔기 때문에 원래 커밋 해시(`6e0a3a6`, `cd922a5`, `55f450a` 등)가
-이 저장소에서도 그대로 통하고, `git blame`도 원래 커밋까지 따라갑니다. 다만
-`git log -- firmware/wheel-controller`는 통합 커밋에서 멈추므로, 통합 전 이력은 `git log 3cca93e^2`로
-봅니다.
+두 저장소 모두 `git subtree`로 커밋 이력째 가져왔기 때문에 원래 커밋 해시(`6e0a3a6`, `cd922a5`,
+`7d321a1` 등)가 이 저장소에서도 그대로 통하고, `git blame`도 원래 커밋까지 따라갑니다. 다만
+`git log -- <폴더>`는 통합 커밋에서 멈추므로, 통합 전 이력은 아래처럼 봅니다.
+
+```bash
+git log 3cca93e^2
+```
+
+```bash
+git log 02f205d^2
+```
+
+앞의 것이 바퀴 제어기, 뒤의 것이 차체 설계 이력입니다.
 
 ## 작업 규칙
 

@@ -7,6 +7,10 @@ MCU 하나에 폴더 하나를 둡니다. 각 폴더는 그 자체로 빌드할 
 | [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 동작 중. 2026-10-13 `lolind32-wheel`에서 이전 · [열린 이슈](wheel-controller/ISSUES.md) |
 | [hoverboard-mainboard/](hoverboard-mainboard/) | 호버보드 GD32F130 메인보드 | BLDC 구동. RoboDurden Gen2.x-GD32 기반, `SLAVE_SAME_SIDE` 패치 · 부저 끔 | PlatformIO (`platform-gd32`) | 빌드 산출물 복구 필요 |
 
+차체 설계가 두 펌웨어에 요구하는 것(보드 전원 핀 제어, 컨택터 감지, 전조등 PWM, 보드당 전류 제한 7 A 등)은
+[system-overview.md](../docs/architecture/system-overview.md#차체-설계가-바퀴-제어기에-요구하는-것)에 모아 두었습니다.
+메인보드 쪽 근거는 차체 설계 결정 [D-03](../hardware/vehicle/models/vehicle/DECISIONS.md)입니다.
+
 ## 폴더 안 구성
 
 PlatformIO 프로젝트를 기준으로 합니다.

@@ -25,3 +25,6 @@
 
 # DXF는 CAD 도구가 CRLF로 쓰므로 줄바꿈을 건드리지 않는다
 *.dxf   -text
+
+# 원본 줄바꿈이 섞여 있다(CR CR LF). 파이썬은 CR 하나도 줄바꿈으로 읽으므로 바이트를 그대로 둔다
+hardware/vehicle/tools/figures/tipping_moment.py -text

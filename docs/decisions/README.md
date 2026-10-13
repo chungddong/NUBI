@@ -1,5 +1,18 @@
 # decisions — 설계 결정 기록 (ADR)
 
+결정 기록은 범위에 따라 두 곳에 나눠 둡니다.
+
+| 범위 | 위치 | 번호 |
+| --- | --- | --- |
+| 차체 설계 — 부품 선정, 기구, 배선, 전원 | [hardware/vehicle/models/vehicle/DECISIONS.md](../../hardware/vehicle/models/vehicle/DECISIONS.md) | D-01 ~ (지금 D-21까지) |
+| 여러 계층에 걸친 것 — 펌웨어 · 소프트웨어 구조, 계층 간 인터페이스, 운용 방식 | 이 폴더 | 0001 ~ |
+
+차체 설계 결정은 버전 작업 흐름(`record.py`, 버전 README)과 묶여 있어 원래 자리에서 이어 씁니다.
+한 결정이 차체와 다른 계층에 같이 걸치면(예: 비상정지 방식은 배선 + 펌웨어) 이 폴더에 쓰고 D-NN을
+링크합니다.
+
+## 이 폴더의 규칙
+
 결정 하나에 파일 하나를 씁니다. 번호는 4자리로 순서대로 붙이고, 한 번 매긴 번호는 다시 쓰지
 않습니다. 결정을 뒤집을 때는 기존 파일을 고치지 않고 새 파일을 만든 뒤, 기존 파일의 상태를
 "대체됨 (→ 000N)"으로 바꿉니다.
@@ -7,8 +20,8 @@
 새 결정은 [0000-template.md](0000-template.md)를 복사해서 씁니다.
 
 ```
-0001-drive-configuration.md
-0002-main-computer.md
+0001-wheel-board-pairing.md
+0002-estop-strategy.md
 ```
 
 ## 목록
@@ -19,9 +32,10 @@
 
 ## 결정을 기다리는 것
 
-[system-overview.md](../architecture/system-overview.md#정해야-할-것)에서 가져왔습니다.
+자세한 내용은 [system-overview.md](../architecture/system-overview.md#정해야-할-것)에 있습니다.
 
-- 구동 구성: 보드 모드 4륜 유지 / 탱크 모드 / UARTBUS로 4장 독립 제어
-- 주 컴퓨터: Jetson Orin Nano와 RDK의 역할 분담
-- 센서 구성: 깊이 카메라 외에 라이다 추가 여부
-- 전원과 안전 계통: 배터리, 비상정지, 범퍼
+- 4륜 보드 짝짓기: 축 단위(D-03, 보드 모드) / 같은 쪽 앞뒤 + `SLAVE_SAME_SIDE`(탱크 4륜) — 지상 주행 시험 후
+- 비상정지 방식: 즉시 차단(D-05) / 정지 유지 + 상선 단락(D-19 제안) — 배선과 펌웨어에 같이 걸침
+- 옆 낮은 장애물 센서 추가 (D-19)
+- 12 V 변환기 용량 (D-11)
+- RDK 보드의 역할

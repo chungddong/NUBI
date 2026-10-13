@@ -16,8 +16,8 @@
 # 1. Python 3.12 설치 — python.org 에서. 이미 있으면 생략.
 #    설치 시 "Add Python to PATH" 체크.
 
-# 2. 저장소를 받아 그 안으로 이동
-git clone <저장소 주소> HoverboardVehicle; cd HoverboardVehicle
+# 2. 누비 저장소를 받아 차체 설계 폴더로 이동 (아래 명령은 모두 이 폴더 기준)
+git clone <저장소 주소> NUBI; cd NUBI\hardware\vehicle
 
 # 3. 가상환경 생성
 py -3.12 -m venv .venv

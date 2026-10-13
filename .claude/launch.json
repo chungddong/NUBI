@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vehicle-sim",
+      "runtimeExecutable": "hardware/vehicle/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "hardware/vehicle/models/vehicle/sim/web/serve.py",
+        "8748"
+      ],
+      "port": 8748
+    }
+  ]
+}
