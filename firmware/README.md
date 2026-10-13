@@ -4,10 +4,14 @@ MCU 하나에 폴더 하나를 둡니다. 각 폴더는 그 자체로 빌드할 
 
 | 폴더 | 보드 | 역할 | 빌드 도구 | 상태 |
 | --- | --- | --- | --- | --- |
-| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 동작 중. 2026-10-13 `lolind32-wheel`에서 이전 · [열린 이슈](wheel-controller/ISSUES.md) |
-| [hoverboard-mainboard/](hoverboard-mainboard/) | 호버보드 GD32F130 메인보드 | BLDC 구동. RoboDurden Gen2.x-GD32 기반, `SLAVE_SAME_SIDE` 패치 · 부저 끔 | PlatformIO (`platform-gd32`) | 빌드 산출물 복구 필요 |
+| [wheel-controller/](wheel-controller/) | LOLIN D32 (ESP32-D0WD-V3) | 안전장치, 바퀴별 좌우 믹싱, Wi-Fi 조종 페이지, 상위 컴퓨터 시리얼 콘솔 | PlatformIO | 바퀴 모드 빌드 동작 중(2026-10-13 플래시, 바퀴 띄운 시험 통과) · 시험 GUI `wheelbench` · [열린 이슈](wheel-controller/ISSUES.md) |
 
-차체 설계가 두 펌웨어에 요구하는 것(보드 전원 핀 제어, 컨택터 감지, 전조등 PWM, 보드당 전류 제한 7 A 등)은
+모터 보드(호버보드 메인보드 ×4)의 펌웨어는 이 저장소에서 관리하지 않습니다. GPL-3.0 업스트림(RoboDurden
+Hoverboard-Firmware-Hack-Gen2.x-GD32)을 고친 것이라 이 PC에서만 관리하고(`hoverboard-mainboard/`, git에서 제외),
+나중에 다른 모터 드라이버로 바뀔 수 있습니다. 바퀴 제어기가 기대하는 보드 쪽 동작(프레임 칸의 의미 등)은
+[system-overview.md](../docs/architecture/system-overview.md#인터페이스-2--바퀴-제어기--모터-보드)에 있습니다.
+
+차체 설계가 펌웨어에 요구하는 것(보드 전원 핀 제어, 컨택터 감지, 전조등 PWM, 보드당 전류 제한 7 A 등)은
 [system-overview.md](../docs/architecture/system-overview.md#차체-설계가-바퀴-제어기에-요구하는-것)에 모아 두었습니다.
 메인보드 쪽 근거는 차체 설계 결정 [D-03](../hardware/vehicle/models/vehicle/DECISIONS.md)입니다.
 
@@ -37,6 +41,3 @@ PlatformIO 프로젝트를 기준으로 합니다.
 - 상위 컴퓨터와 주고받는 명령이나 프레임 형식을 바꾸면
   [docs/architecture/system-overview.md](../docs/architecture/system-overview.md)도 같이 고칩니다.
 - 업스트림 코드에서 복사한 파일은 출처와 커밋/버전을 README에 적습니다.
-- `hoverboard-mainboard/`는 업스트림 저장소 전체를 넣지 않고, 업스트림 커밋 해시 · 바꾼 설정
-  (`config.master.h`, `config.slave.h`) · 패치 파일 · 빌드된 `.bin`만 둡니다. `.bin`은 이 폴더에서만
-  git에 올라가도록 예외 처리해 두었습니다.

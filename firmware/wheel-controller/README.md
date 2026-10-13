@@ -10,8 +10,12 @@ UART. Built and flashed entirely from the CLI — no Arduino IDE.
 
 Status: link verified in both directions, motor runs under command, GUI control
 panel working, on-board Wi-Fi hotspot with a captive-portal control page.
-Tank drive (one master per wheel, mixing on the ESP32) is implemented but not
-yet driven on the ground — see [Drive modes](#drive-modes). [The work log](../../docs/worklog/README.md) is the
+Since 2026-10-13 the firmware drives every wheel itself (wheel mode, mixing on
+the ESP32) and **needs mainboard masters that pass per-wheel values straight through** (the
+"passthrough" build; the mainboard firmware is kept outside this repository). All four boards and
+the ESP32 were flashed that day and all four wheels pass the lifted-wheel
+bench test (forward, pivot); not yet driven on the ground. See
+[Wheel mixing](#wheel-mixing). [The work log](../../docs/worklog/README.md) is the
 dated journal of each working session, and [ISSUES.md](ISSUES.md) tracks the open
 issues and what to do next. [The link-debugging notes](../../docs/worklog/topics/wheel-link-debugging.md) record how it got there, including
 the wrong turns — worth reading before adding a new diagnostic, since most of
@@ -93,11 +97,13 @@ unprompted, so they cannot share a wire:
 | ESP32 TX → header 5 | GPIO17 | GPIO27 |
 | GND ↔ header 6 | ✓ | ✓ |
 
-What the two links *mean* is the drive mode (see [Drive modes](#drive-modes)):
-in tank mode link A is the **left** wheel's master and link B the **right**
-wheel's; in board mode each link carries a master+slave pair. Either way any
-slave's remote header stays empty, both GNDs go to the D32, and GPIO25 stays
+Each link is one axle: link A the front master+slave pair, link B the rear.
+Both masters sit on the **right** wheel (the board marked 主), hence `i 1`. The
+slaves' remote headers stay empty, both GNDs go to the D32, and GPIO25 stays
 reserved as the diagnostics' unconnected control pin.
+
+Dupont leads on the remote header work loose: a silent link (`rx` stuck) on
+2026-10-13 was a lead off GPIO16/17, not the firmware.
 
 ## Tools
 
@@ -106,7 +112,8 @@ time.
 
 | tool | purpose |
 | --- | --- |
-| [tools/hoverctl.py](tools/hoverctl.py) | mouse control panel — sliders, telemetry, STOP, link-quality meter |
+| [tools/wheelbench.py](tools/wheelbench.py) | wheel-mode bench panel — four-wheel telemetry, both links, hold-to-drive and 3 s timed tests, side swap / deadband / clamp. `.\wheelbench.cmd`; `--selftest 5` reads without driving |
+| [tools/hoverctl.py](tools/hoverctl.py) | mouse control panel — sliders, telemetry, STOP, link-quality meter (front link only) |
 | [tools/speedsweep.py](tools/speedsweep.py) | step duty 100→1000, record speed and current, fit the motor's Kv |
 | [tools/speedcalc.py](tools/speedcalc.py) | Kv → speeds and currents, flat and on grades, for any wheel count |
 | [tools/test_stop.py](tools/test_stop.py) | regression test for the stop-resurrection bug |
@@ -114,11 +121,15 @@ time.
 
 ## Hoverboard link
 
-Mainboard runs [RoboDurden's Hoverboard-Firmware-Hack-Gen2.x](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x),
-binary `2.1.8 master uart.bin` — the plain UART build, **not** UARTBUS.
-Source lives in the separate [-GD32 repo](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32);
-`include/hoverserial.h` and `include/util.h` are copied verbatim from its
-`PlatformIO Examples/TestSpeed/`.
+Mainboards run [RoboDurden's Hoverboard-Firmware-Hack-Gen2.x](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x)
+as plain UART builds, **not** UARTBUS. Until 2026-10-13 the masters ran the
+prebuilt `2.1.8 master uart.bin`; this firmware now expects the
+**passthrough** master built from the [-GD32 repo](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32)
+— why is in [ADR 0001](../../docs/decisions/0001-wheel-board-pairing.md). The slaves run a build from the same
+source. The mainboard firmware itself is GPL-3.0-derived and managed outside this repository; the boards may
+be swapped for a different motor driver later, so this README only records what the ESP32 relies on.
+`include/hoverserial.h` and `include/util.h` are copied verbatim from the -GD32
+repo's `PlatformIO Examples/TestSpeed/` (GPL-3.0).
 
 | | |
 | --- | --- |
@@ -135,10 +146,10 @@ Mainboard config that shapes what commands mean:
 
 | `config.h` | value | consequence |
 | --- | --- | --- |
+| `PILOT_USER` | passthrough `Pilot()` | no mixing on the board: `iSpeed` is the master's wheel, `iSteer` the slave's (the master still negates what it forwards to the slave) |
 | `DRIVING_MODE` | `0` = pwm | the command *is* a duty cycle; `100` of 1000 is 10 % and barely creeps |
 | `SPEED_COEFFICIENT` | `-1` | direction is inverted — decide which sign is "forwards" empirically |
-| `STEER_COEFFICIENT` | `1` | |
-| `BEEP_BACKWARDS` | on, `beepsBackwards = SET` | speed below −50 beeps, which confirms the command reached the motor logic without needing a motor |
+| `BEEP_BACKWARDS` | off in passthrough (on in the old prebuilt) | the old build beeped below −50, which confirmed a command reached the motor logic without needing a motor |
 
 ### Liveness is not the report line
 
@@ -216,18 +227,17 @@ The page is a landscape button pad, game-controller style: steer buttons (◀ �
 on the left half, throttle buttons (▲ 전진 / ▼ 후진) on the right, STOP and
 telemetry in the middle. Hold to drive, release to zero that axis; buttons
 are multi-touch, so throttle and steer press together. Settings: speed
-strength (25–100 % of the clamp), steer strength (25–100 %; of the clamp in
-tank mode, of full lock in board mode), speed/steer invert toggles (persisted
-in the browser; direction with `SPEED_COEFFICIENT -1` is an empirical
-matter), the max-clamp field, and the [drive-mode](#drive-modes) settings
-(mode, link B invert, deadband — these live in the firmware's flash, not the
-browser). The link pill is the same meter as the GUI status bar (`link clean`
-/ `DROPOUTS` / `board silent`), fed by the `rx` counter, not the report line;
-while the dead-man has cut the wheel it shows the reason instead.
+strength (25–100 % of the clamp), steer strength (25–100 % of the clamp),
+a speed invert toggle (persisted in the browser; direction with
+`SPEED_COEFFICIENT -1` is an empirical matter), the max-clamp field, and the
+[vehicle settings](#wheel-mixing) (좌우 바꿈 side swap, deadband — these live
+in the firmware's flash, not the browser). Telemetry shows the four wheels
+as 앞좌/앞우/뒤좌/뒤우, following the side swap. The link pill is the same
+meter as the GUI status bar (`link clean` / `DROPOUTS` / `board silent`), fed
+by the `rx` counter, not the report line; while the dead-man has cut the
+wheel it shows the reason instead.
 
-In board mode **steer only works while moving** (see [Drive modes](#drive-modes)
-for why); the page says so and the steer buttons are meant to be held together
-with a throttle button. In tank mode the steer buttons alone pivot the frame.
+The steer buttons alone pivot the frame on the spot.
 
 Two things carry over from the desktop tools by design:
 
@@ -254,67 +264,75 @@ run together.
 
 | cmd | effect |
 | --- | --- |
-| `s <n>` | target speed (a bare number works too) |
-| `t <n>` | target steer |
+| `s <n>` | target speed |
+| `t <n>` | target steer, relative to the clamp (+ = right turn) |
 | `x` or blank line | stop |
 | `m <n>` | raise/lower the clamp, 0..1000 |
 | `l <n>` | LED/state bits |
 | `w <0\|1>` | arm/disarm the host watchdog |
 | `h` | heartbeat (feeds the watchdog, nothing else) |
-| `v <0\|1>` | drive mode: `0` board mixes, `1` tank (persisted; stops the wheel first) |
-| `i <0\|1>` | invert link B (tank mode; persisted; stops the wheel first) |
+| `i <0\|1>` | swap sides: `1` = the masters drive the right wheels (persisted; stops the wheels first) |
 | `b <n>` | deadband duty, 0 = off (persisted) |
-| `?` | help, and the current drive-mode settings |
+| `?` | help, and the current settings |
 
-### Drive modes
+Every command starts with its letter. The old bare-number shortcut for speed
+is gone, `|s|` and `|t|` below 50 count as 0, and the console drops
+non-printable bytes and over-long lines — together these stop the junk a
+CH340 emits when a host opens the port from ever moving a wheel (ISSUES N1).
 
-Two ways to turn a two-wheel frame, chosen with `v` (or the page's 구동
-selector) and remembered in flash across reboots. Boot default is board
-mode — the stock master+slave wiring drives as before; tank mode refuses to
-move until both links deliver telemetry.
+### Wheel mixing
 
-**Board mode (`v 0`)** — one master+slave pair per link, and the mainboard
-mixes speed and steer itself. Upstream `main.c` does that *multiplicatively*
-in pwm mode: steer is scaled down by an expo as speed rises, mapped to an
-angle, and a lookup table turns that into the inner/outer duty **ratio**
-(`pwmSlave = xScale × pwmMaster`). Two consequences, both measured against
-the upstream source rather than guessed:
-
-- steer with zero speed moves nothing — there is no pivot turn;
-- at full lock the inner wheel gets at most ~12 % reverse duty (−109 at
-  speed 200, −120 at 300, ~0 by 600, and +30 % *forward* at 1000). This motor
-  needs ~20 % to move at all, so the inner wheel just sits and drags.
-
-That is a hoverboard-rider tuning, not a bug here, and nothing sent in the
-9-byte frame changes it.
-
-**Tank mode (`v 1`)** — both boards run the *master* binary, one per wheel,
-link A left and link B right, and the ESP32 does the mixing:
+The masters run the passthrough build, so the mainboards do no mixing at all:
+the frame's `iSpeed` drives the master's wheel and `iSteer` the slave's. The
+ESP32 mixes and sends the same pair to both axles:
 
 ```
 turn  = steer × max / 1000
 left  = clamp(speed + turn, ±max)
-right = clamp(speed − turn, ±max)      → steer field on the wire is 0
+right = clamp(speed − turn, ±max)
+frame = (iSpeed = left, iSteer = right)   both links; swapped with `i 1`
 ```
 
 Steer alone pivots on the spot at ±max; full steer at full speed turns about
-the stationary inner wheel; neither wheel ever exceeds the clamp. Positive
-steer is a right turn (left wheel gets the extra). Left and right hub motors
-face opposite ways, so link B is negated by default (`i 1`) — exactly what
-the hoverboard master does to its slave. This is empirical: if "forward"
-spins the frame on the spot, flip it with `i 0`; if left and right are
-swapped, swap the link A/B wires or use the page's 조향 반전. Tank mode needs
-**both** links alive — one wheel driving alone is a spin, so master 2 going
-silent stops everything, from boot, with no hot-join grace.
+the stationary inner wheels; no wheel ever exceeds the clamp. Positive steer
+is a right turn (the left wheels get the extra). The master still negates what
+it forwards to its slave, and the two wheels of an axle face each other, so
+equal values drive both the same way — `(x, x)` is exactly what the stock
+firmware did for "speed x, steer 0".
 
-**Deadband (`b`, both modes)** — below ~200 of 1000 (20 % duty) the wheel does
-not move under the frame's weight, so with a 20-per-tick ramp a press used to
-be a second of nothing. Every non-zero per-wheel command is now remapped onto
+Which wheel the master drives is a fact of the vehicle, not of the code: the
+telemetry's `iSpeedL` is the master's wheel. On this frame both masters drive
+the **right** wheel (bench test 2026-10-13; the 2026-09-17 note saying left was
+wrong), so the ESP32's flash holds `i 1` (좌우 바꿈 on the page), which swaps
+sides for commands and telemetry alike. After an `erase-flash` set it again.
+
+Why not let the board mix: the stock firmware mixes *multiplicatively* in pwm
+mode — steer is scaled down by an expo as speed rises, mapped to an angle, and
+a lookup table turns that into the inner/outer duty **ratio**. Steer with zero
+speed moves nothing, and at full lock the inner wheel gets at most ~12 %
+reverse duty (−109 at speed 200, −120 at 300, ~0 by 600), while this motor
+needs ~20 % to move at all. Nothing sent in the 9-byte frame changes that,
+which is why the mainboard firmware had to change.
+
+**This frame meaning needs the passthrough masters.** A stock master reads
+`iSteer` as steer and turns where this firmware means straight. The reverse
+mistake is worse: an ESP32 build from before 2026-10-13 sends board-mode steer
+at up to ±1000, which a passthrough master turns into 100 % duty on the slave
+wheel. Flash the ESP32 first, then the masters.
+
+Link B (the rear axle) is hot-join: it takes part in the dead-man only after
+its master has delivered a frame, so the front axle can be brought up alone
+on the bench — one axle has both sides, so it still drives straight. Once
+seen, its silence stops everything.
+
+**Deadband (`b`)** — below ~200 of 1000 (20 % duty) the wheel does not move
+under the frame's weight, so with a 20-per-tick ramp a press used to be a
+second of nothing. Every non-zero per-wheel command is remapped onto
 `[deadband, max]` before it goes on the wire; the ramp still runs in command
 space, so only the first tick out of zero jumps. `b 0` disables it, and
 `max ≤ deadband` disables it implicitly. Tune it to the lowest value that
-reliably starts the loaded wheel. The serial report line ends in `out A B`,
-the values actually sent per link.
+reliably starts the loaded wheel. The serial report line ends in `out L R`,
+the values actually sent per side.
 
 ### Diagnostics
 
@@ -352,20 +370,17 @@ Four guards, all in [src/main.cpp](src/main.cpp):
 
 - **Clamp** — `MAX_CMD_BOOT` is 400 of 1000 at boot. In pwm mode that is 40 %
   duty; raise it toward 1000 with `m` or the GUI spinbox to reach top speed.
-  The clamp bounds what reaches the wire in both drive modes, deadband remap
-  included. Steer is deliberately outside it (fixed ±1000): in board mode the
-  mainboard maps steer to a wheel-speed *ratio* that can only slow the inner
-  wheel, so full lock is speed-safe, and capping it made turns weak on the
-  ground; in tank mode steer is scaled by the clamp and each wheel is clamped
-  after mixing.
+  The clamp bounds what reaches the wire for every wheel, deadband remap
+  included: steer is scaled by the clamp and each wheel is clamped after
+  mixing.
 - **Ramp** — `RAMP_PER_TICK` limits speed change to 20 per 100 ms, so nothing
   steps straight to full command; steer ramps at 100 per 100 ms (full lock in
   ~1 s) because steering has to respond. Stops are exempt and take effect
   immediately. The deadband remap sits after the ramp, so the rate of change
   is unchanged; only the first tick out of zero jumps to a duty that moves.
 - **Dead-man** — telemetry gaps over `RX_TIMEOUT_MS` zero the command, so a
-  broken link cannot leave a wheel spinning. In tank mode both links must be
-  alive; in board mode link B joins the dead-man after its first frame.
+  broken link cannot leave a wheel spinning. Link A must be alive; link B
+  joins the dead-man after its first frame.
 - **Host watchdog** — opt-in via `w 1`, which the GUI sends on connect and then
   feeds every 250 ms. Silence over `HOST_TIMEOUT_MS` stops the wheel, so a
   crashed GUI or an unplugged cable does not leave it running. It is off by
@@ -405,28 +420,23 @@ against the old code, so it will catch a regression:
 ### Split boards
 
 Gen2.x hoverboards carry two mainboards, one per wheel, joined by the sensor
-cable. Both are flashed now — `2.1.8 master Uart.bin` on the left-wheel board,
-`2.1.8 slave.bin` on the right-wheel board — so `iSpeedR` is live and steer
-actually steers. The ESP32 wires to the **master's** 6-pin header only; the
-slave gets everything over the master–slave USART cable, and its own remote
-header stays empty.
+cable: a master and a slave, so `iSpeedL` is the master's wheel and `iSpeedR`
+the slave's. On this frame the masters are the right-wheel boards. The ESP32 wires to the **master's** 6-pin
+header only; the slave gets everything over the master–slave USART cable, and
+its own remote header stays empty.
 
-That is board mode. With a second master board the same two boards can
-instead each be a master driving one wheel — tank mode, where the mixing moves
-to the ESP32 and pivot turns become possible; see [Drive modes](#drive-modes).
-The firmware talks to both masters over two independent UARTs (wiring table
-above) and reads telemetry from each. In board mode link B is hot-join: it
-takes part in the dead-man only after its master has delivered a frame, so a
-not-yet-wired second pair cannot veto the first — but once seen, its silence
-stops everything. In tank mode it is required from boot. Per-link wheels show
-in the web page as ①/② and the serial report line carries a second block after
-`rx N` (appended there so hoverctl.py's regex still matches).
+The frame has four wheels from two hoverboards: the front pair on link A, the
+rear pair on link B, each pair still master + slave across its axle. The
+firmware talks to both masters over two independent UARTs (wiring table
+above) and reads telemetry from each; the serial report line carries the
+second block after `rx N` (appended there so hoverctl.py's regex still
+matches).
 
-For a 4-wheel frame in tank mode, each side becomes a master+slave pair with
-the pair's steer at 0 — the slave then mirrors its master exactly. The master
+Pairing the boards along each *side* instead (front + rear on one cable) was
+the plan until 2026-10-13. It needed a mainboard patch, because the master
 negates its slave (`SendSlave(-pwmSlave)`, for the mirrored hoverboard
-mounting), so a slave motor on the *same* side as its master must be mounted
-the other way round to spin with it.
+mounting) and a same-side slave would run backwards, plus rerouted cables. The
+passthrough masters made it unnecessary.
 
 The board powers itself off after a few minutes of idling, and it did so in the
 middle of three separate measurements during bring-up. Silence on GPIO16 almost

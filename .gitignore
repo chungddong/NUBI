@@ -18,7 +18,8 @@ venv/
 .pio/
 .arduino/
 *.bin
-!firmware/hoverboard-mainboard/**/*.bin
+# 메인보드 펌웨어(GPL-3.0 업스트림을 고친 것)와 그 기록은 이 PC에서만 관리한다 (2026-10-13)
+firmware/hoverboard-mainboard/
 
 # ── ROS 2 ───────────────────────────────────
 software/ros2_ws/build/

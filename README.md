@@ -79,8 +79,7 @@ NUBI/
 │   │                      부품 조사, 웹 시뮬레이터, 구조해석
 │   └── electrical/        차체 모델 밖의 전장 문서 (핀맵, 회로도)
 ├── firmware/
-│   ├── wheel-controller/      LOLIN D32 (ESP32) 바퀴 제어기
-│   └── hoverboard-mainboard/  호버보드 메인보드 빌드 설정
+│   └── wheel-controller/  LOLIN D32 (ESP32) 바퀴 제어기
 ├── software/ros2_ws/      ROS 2 Humble 워크스페이스 (예정)
 ├── sim/                   ROS 2용 시뮬레이션 (예정)
 ├── tools/                 PC 쪽 개발 · 분석 도구
@@ -105,7 +104,8 @@ py -3.12 -m venv .venv
 # 뷰어를 띄워 두고 (http://127.0.0.1:3939)
 .venv\Scripts\python.exe -m ocp_vscode
 # 다른 터미널에서 버전 하나를 다시 짓기 (형상 · 검증 · STEP · 이미지)
-# 휠 모터 STEP이 필요합니다 — hardwareehicleefmodel\README.md 참고
+# 휠 모터 STEP이 필요합니다 — hardwareehicle
+efmodel\README.md 참고
 .venv\Scripts\python.exe models\vehicle\record.py v28_wiring --rebuild
 ```
 
@@ -191,7 +191,9 @@ AI 에이전트(Claude Code, Codex)용 규칙은 [AGENTS.md](AGENTS.md)에 있�
 | 대상 | 출처 |
 | --- | --- |
 | `firmware/wheel-controller/include/hoverserial.h`, `util.h` | [RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32](https://github.com/RoboDurden/Hoverboard-Firmware-Hack-Gen2.x-GD32) (GPL-3.0)에서 그대로 복사 |
-| 호버보드 모터 보드 펌웨어 | 같은 프로젝트 (GPL-3.0). 이 저장소에는 바꾼 설정과 패치만 둡니다 |
+
+모터 보드(호버보드 메인보드)에는 같은 프로젝트(GPL-3.0)를 고친 펌웨어를 올려 쓰지만, 그 펌웨어는 이 저장소에
+넣지 않고 따로 관리합니다. 메인보드는 나중에 다른 모터 드라이버로 바뀔 수 있습니다.
 
 재배포 조건을 확인하지 못한 외부 자료는 저장소에 넣지 않았습니다. 차체를 다시 지으려면 호버보드 6.5" 휠 모터
 STEP을 따로 받아야 합니다([hardware/vehicle/refmodel/](hardware/vehicle/refmodel/README.md)).

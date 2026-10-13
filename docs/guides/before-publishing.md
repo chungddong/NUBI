@@ -10,8 +10,8 @@
       (명령 · 텔레메트리 구조체, 송수신 함수)을 직접 다시 쓰고 두 파일을 뺍니다. 실기에서 통신을 한 번 확인합니다.
 - [ ] 저장소 루트에 `LICENSE`를 넣습니다 (MIT로 할 예정, 2026-10-13 논의).
 - [ ] 루트 README의 "출처와 라이선스" 절을 고칩니다.
-- [ ] 메인보드 펌웨어(GPL-3.0 업스트림을 고친 것)의 소스 · `.bin`이 `firmware/hoverboard-mainboard/local/`에만 있고
-      git에 없는지 확인합니다.
+- [ ] 메인보드 펌웨어 폴더(`firmware/hoverboard-mainboard/`, GPL-3.0 업스트림을 고친 소스 · bin · 기록)가 통째로
+      git에 없는지 확인합니다: `git ls-files firmware/hoverboard-mainboard`가 비어 있어야 합니다.
 
 ## 2. 비밀값과 개인 정보
 

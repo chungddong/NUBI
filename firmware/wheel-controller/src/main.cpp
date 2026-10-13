@@ -1,25 +1,26 @@
-// Interactive speed/steer console for a Gen2.x hoverboard mainboard.
+// Interactive speed/steer console for two Gen2.x hoverboard axles.
 //
-// Mainboard runs RoboDurden's Hoverboard-Firmware-Hack-Gen2.x, binary
-// "2.1.8 master uart.bin" (plain UART build, not UARTBUS). Protocol details
-// and the safety notes are in README.md.
+// Each axle is a master+slave mainboard pair. The masters run RoboDurden's
+// Hoverboard-Firmware-Hack-Gen2.x-GD32 with the NUBI "passthrough" pilot
+// (built and kept outside this repository): they do no mixing of their own, the frame's
+// iSpeed drives the master's wheel and iSteer the slave's. All mixing happens
+// here. Protocol details and the safety notes are in README.md.
 //
 // Type commands into the USB serial monitor at 115200:
 //
-//   s <n>   target speed, -MAX..MAX   (also: a bare number)
-//   t <n>   target steer, -1000..1000 (not under the MAX clamp -- see below)
+//   s <n>   target speed, -MAX..MAX
+//   t <n>   target steer, -1000..1000, relative to MAX (+ = right turn)
 //   x       stop now (also: a blank line)
 //   m <n>   raise/lower the MAX clamp, 0..1000
 //   l <n>   LED/state bits: 1=green 2=orange 4=red 8=up 16=down 32=batt3
 //   w <0|1> host watchdog: once on, silence from the host stops the wheel
 //   h       heartbeat, feeds the watchdog and nothing else
-//   v <0|1> drive mode: 0 = mainboard mixes (master+slave pair on link A),
-//           1 = tank (link A = left wheel's master, link B = right wheel's)
-//   i <0|1> invert link B (tank mode; the right motor is mounted mirrored)
+//   i <0|1> swap sides: 1 = the masters drive the RIGHT wheels
 //   b <n>   deadband: duty below which the wheel does not move, 0 = off
 //   ?       help
 //
-// v, i and b persist in flash (NVS) across reboots.
+// |s| and |t| below STAND_STILL are taken as 0. i and b persist in flash
+// (NVS) across reboots.
 //
 // Commands ramp instead of stepping, and the wheel is cut if telemetry stops.
 //
@@ -44,9 +45,9 @@
 #include "util.h"
 #include "hoverserial.h"
 
-// Two masters, one per link. Plain-UART masters all talk unprompted at
-// ~10 Hz, so they cannot share a wire -- each gets its own UART. What the two
-// links mean depends on the drive mode (see "drive modes" below).
+// Two masters, one per link: link A is the front axle, link B the rear.
+// Plain-UART masters all talk unprompted at ~10 Hz, so they cannot share a
+// wire -- each gets its own UART.
 // GPIO25 stays reserved: it is the unconnected control pin the diagnostics
 // compare against.
 static const int PIN_RX = 16;   // link A: ESP32 RX <- master 1 TX (header 4)
@@ -62,38 +63,33 @@ static const uint32_t REPORT_MILLIS = 200;  // telemetry print rate
 // Start conservative. Raise MAX with the 'm' command once the wheel behaves.
 static const int MAX_CMD_BOOT = 400;      // |speed| clamp at boot
 static const int RAMP_PER_TICK = 20;      // per 100 ms -> ~2 s across the clamp
-// Steer is deliberately NOT under the speed clamp. In pwm mode the mainboard
-// maps steer to a wheel-speed ratio -- it can only slow the inner wheel, never
-// raise speed -- so full lock (+/-1000) is speed-safe, and capping it at the
-// clamp just makes turns weak. It also ramps faster: steering must respond.
+// Steer is a fraction of the clamp, not a duty of its own: full steer at zero
+// speed pivots at +/-MAX, and no wheel ever exceeds MAX. It ramps faster than
+// speed because steering has to respond.
 static const int MAX_STEER = 1000;
 static const int STEER_RAMP_PER_TICK = 100;  // per 100 ms -> full lock in ~1 s
-// Measured on the assembled frame 2026-08-12: positive iSteer turned it LEFT.
-// Flipped here so that positive steer = right turn on every interface (web,
-// serial 't', GUI) without each one needing its own invert.
-static const int STEER_SIGN = -1;
+// Commands this small are taken as 0, the same rule as the mainboard's
+// STAND_STILL_THRESHOLD. Without it the deadband would blow a stray "s 1"
+// (a noise byte when a host opens the port) up into a 20 % duty.
+static const int STAND_STILL = 50;
 
-// --- drive modes -------------------------------------------------------------
-// MODE_BOARD: each link carries a master+slave pair and the mainboard mixes
-//   speed and steer itself. Upstream main.c does that multiplicatively (steer
-//   sets the inner/outer duty RATIO through a lookup table, scaled down by an
-//   expo as speed rises), so steer with zero speed moves nothing, and at full
-//   lock the inner wheel never gets more than ~12 % reverse duty -- below the
-//   ~20 % this motor needs to move at all. No pivot turns, weak steering.
-// MODE_TANK: link A is the LEFT wheel's master, link B the RIGHT wheel's,
-//   and the mixing happens here: left = speed + turn, right = speed - turn,
-//   with the frame's steer field at 0. Pivot turns work, and both wheels get a
-//   duty they can act on. Both links must be alive to drive.
-// Persisted in NVS with the 'v' command; the web page has the same switch.
-// Boot default is board mode: that is what a stock master+slave pair does
-// with no rewiring, and tank mode refuses to drive until both links talk.
-enum { MODE_BOARD = 0, MODE_TANK = 1 };
-static uint8_t iMode = MODE_BOARD;
-// Left and right hub motors face opposite ways, so the same duty spins them
-// in opposite directions -- the hoverboard master negates its slave for the
-// same reason. Master 2 has nobody to negate it, so we do. Empirical: if
-// "forward" spins the frame on the spot, flip this ('i' command).
-static bool bInvertB = true;
+// --- wheel mixing ------------------------------------------------------------
+// The passthrough masters do no mixing (the stock firmware's multiplicative
+// mix had no pivot turn and gave the inner wheel at most ~12 % reverse duty,
+// below the ~20 % this motor needs). Here: left = speed + turn,
+// right = speed - turn, and every link gets (master wheel, slave wheel) in
+// the frame's (iSpeed, iSteer). The master still negates what it forwards to
+// its slave; the two wheels of an axle face each other, so equal values move
+// both the same way -- (x, x) is exactly the stock "speed x, steer 0".
+//
+// THIS FRAME MEANING NEEDS THE PASSTHROUGH MASTERS. A stock master reads
+// iSteer as steer and turns where this firmware means straight.
+//
+// 'i 1' swaps the sides, for commands and telemetry alike. On this vehicle
+// both masters drive the RIGHT wheel (seen on the bench 2026-10-13; the
+// 2026-09-17 note said left), so the board's NVS holds swap = 1. The default
+// below only matters after an erase-flash.
+static bool bSwapLR = false;
 // Below this duty the motor cannot overcome cogging and load (measured
 // ~200 of 1000 on the assembled frame). Non-zero commands are remapped onto
 // [iDeadband, iMaxCmd] so the wheel turns at the first ramp tick instead of
@@ -114,7 +110,7 @@ static int iSpeedTarget = 0, iSteerTarget = 0;
 static int iSpeedNow = 0, iSteerNow = 0;
 static uint8_t wState = 32;  // Battery3Led; never set 64 (Disable) or 128 (ShutOff)
 
-static int iOutA = 0, iOutB = 0;  // what last went on the wire, per link
+static int iOutL = 0, iOutR = 0;  // what last went on the wire, per side (both axles)
 
 static unsigned long iNextSend = 0, iNextReport = 0, iLastRxAt = 0, iLastRxAt2 = 0;
 static bool bCut = false;
@@ -170,18 +166,17 @@ static void MeasureRC();
 static Preferences oPrefs;
 
 static void PrintSettings() {
-  Serial.printf("mode %s | link B %s | deadband %d\n",
-                iMode == MODE_TANK ? "tank (A=left, B=right, mixed here)"
-                                   : "board (mainboard mixes)",
-                bInvertB ? "inverted" : "normal", iDeadband);
+  Serial.printf("wheel mode (A=front axle, B=rear) | masters on the %s wheel | deadband %d\n",
+                bSwapLR ? "RIGHT" : "left", iDeadband);
 }
 
 static void LoadSettings() {
   // Read/write open on purpose: read-only fails (and logs) until the
   // namespace exists, and it does not exist on the first boot.
   if (!oPrefs.begin("wheel", false)) return;
-  iMode = oPrefs.getUChar("mode", iMode) ? MODE_TANK : MODE_BOARD;
-  bInvertB = oPrefs.getBool("invb", bInvertB);
+  // Older builds also stored "mode" and "invb" (the retired board/tank
+  // modes); they are left in place and never read.
+  bSwapLR = oPrefs.getBool("swap", bSwapLR);
   const int iDead = oPrefs.getInt("dead", iDeadband);  // CLAMP is a macro: no calls inside it
   iDeadband = CLAMP(iDead, 0, 1000);
   oPrefs.end();
@@ -189,18 +184,22 @@ static void LoadSettings() {
 
 static void SaveSettings() {
   if (!oPrefs.begin("wheel", false)) return;
-  oPrefs.putUChar("mode", iMode);
-  oPrefs.putBool("invb", bInvertB);
+  oPrefs.putBool("swap", bSwapLR);
   oPrefs.putInt("dead", iDeadband);
   oPrefs.end();
 }
 
 static void Help() {
-  Serial.println(F("  s <n>  speed   t <n>  steer   x  stop"));
+  Serial.println(F("  s <n>  speed   t <n>  steer (+ = right)   x  stop"));
   Serial.printf("  m <n>  max clamp (now %d)   l <n>  led bits (now %u)\n", iMaxCmd, wState);
   Serial.printf("  w <0|1> host watchdog (now %s)   h  heartbeat\n", bWatchdog ? "on" : "off");
-  Serial.println(F("  v <0|1> drive mode 0=board 1=tank   i <0|1> invert link B   b <n> deadband"));
+  Serial.println(F("  i <0|1> swap sides (1 = masters on the right)   b <n> deadband"));
   PrintSettings();
+}
+
+// Small commands are no command at all -- see STAND_STILL.
+static int Still(int v) {
+  return (v < STAND_STILL && v > -STAND_STILL) ? 0 : v;
 }
 
 static void StopNow(const char *why) {
@@ -221,11 +220,11 @@ static void HandleLine(char *s) {
 
   switch (cmd) {
     case 's':
-      iSpeedTarget = CLAMP(arg, -iMaxCmd, iMaxCmd);
+      iSpeedTarget = Still(CLAMP(arg, -iMaxCmd, iMaxCmd));
       Serial.printf("speed -> %d\n", iSpeedTarget);
       break;
     case 't':
-      iSteerTarget = CLAMP(arg, -MAX_STEER, MAX_STEER);
+      iSteerTarget = Still(CLAMP(arg, -MAX_STEER, MAX_STEER));
       Serial.printf("steer -> %d\n", iSteerTarget);
       break;
     case 'x':
@@ -247,15 +246,9 @@ static void HandleLine(char *s) {
       break;
     case 'h':
       break;  // heartbeat: PollConsole already refreshed the timer
-    case 'v':
-      StopNow("mode change");  // the links change meaning under a moving wheel
-      iMode = arg ? MODE_TANK : MODE_BOARD;
-      SaveSettings();
-      PrintSettings();
-      break;
     case 'i':
-      StopNow("link B inverted");
-      bInvertB = arg != 0;
+      StopNow("sides swapped");  // left and right change meaning under a moving wheel
+      bSwapLR = arg != 0;
       SaveSettings();
       PrintSettings();
       break;
@@ -282,32 +275,44 @@ static void HandleLine(char *s) {
       Help();
       break;
     default:
-      if (cmd == '-' || cmd == '+' || (cmd >= '0' && cmd <= '9')) {
-        iSpeedTarget = CLAMP(atoi(s), -iMaxCmd, iMaxCmd);
-        Serial.printf("speed -> %d\n", iSpeedTarget);
-      } else {
-        Serial.println(F("? unknown -- '?' for help"));
-      }
+      // No bare-number shortcut for speed any more: it turned port-open noise
+      // into motion (ISSUES N1). Every command starts with its letter.
+      Serial.println(F("? unknown -- '?' for help"));
   }
 }
 
 // Takes iNow rather than calling millis() itself: the watchdog compares against
 // loop()'s timestamp, and a fresher millis() here would make iLastHostAt exceed
 // it, underflowing the unsigned subtraction into a bogus timeout.
+//
+// Only printable ASCII builds a line. A CH340 emits junk bytes when a host
+// opens the port; those are dropped here, and they do not feed the host
+// watchdog either. A line that overflows the buffer is dropped whole rather
+// than run truncated.
 static void PollConsole(unsigned long iNow) {
   static char aLine[24];
   static uint8_t iLen = 0;
+  static bool bOverflow = false;
 
   while (Serial.available()) {
-    const char c = Serial.read();
-    iLastHostAt = iNow;
-    if (c == '\r') continue;
+    const int c = Serial.read();
     if (c == '\n') {
+      iLastHostAt = iNow;
       aLine[iLen] = 0;
-      HandleLine(aLine);
+      if (bOverflow) {
+        Serial.println(F("? line too long -- ignored"));
+      } else {
+        HandleLine(aLine);
+      }
       iLen = 0;
+      bOverflow = false;
+    } else if (c < 0x20 || c > 0x7E) {
+      continue;  // CR, and the junk of a port being opened
     } else if (iLen < sizeof(aLine) - 1) {
-      aLine[iLen++] = c;
+      iLastHostAt = iNow;
+      aLine[iLen++] = (char)c;
+    } else {
+      bOverflow = true;
     }
   }
 }
@@ -319,12 +324,9 @@ static void PollConsole(unsigned long iNow) {
 // is no rate-limiter queue for a stop to lose against; a 300 ms repeater
 // re-sends the *current* intent only, which after a stop is zero.
 //
-// In board mode the steer mixing happens on the master mainboard and, in pwm
-// mode (DRIVING_MODE 0), it is multiplicative: steer sets the left/right
-// speed RATIO, so steer with zero speed moves nothing and the page says so.
-// In tank mode the steer buttons alone pivot the frame. The drive-mode
-// settings (mode, link B invert, deadband) live in the firmware's NVS, not in
-// the browser, so the page reads them back from /api/status.
+// The steer buttons alone pivot the frame (see "wheel mixing"). The settings
+// that describe the vehicle (side swap, deadband) live in the firmware's NVS,
+// not in the browser, so the page reads them back from /api/status.
 static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -371,14 +373,14 @@ select,.row input[type=number]{background:#1d2026;border:1px solid #333;border-r
 <header><h1>hoverwheel</h1><span id="link">connecting</span></header>
 <div id="hint">가로 화면 권장</div>
 <div class="tele">
-<div><b id="s1l">--</b><span>①좌 km/h</span></div>
-<div><b id="s1r">--</b><span>①우 km/h</span></div>
-<div><b id="s2l">--</b><span>②좌 km/h</span></div>
-<div><b id="s2r">--</b><span>②우 km/h</span></div>
+<div><b id="s1l">--</b><span>앞좌 km/h</span></div>
+<div><b id="s1r">--</b><span>앞우 km/h</span></div>
+<div><b id="s2l">--</b><span>뒤좌 km/h</span></div>
+<div><b id="s2r">--</b><span>뒤우 km/h</span></div>
 <div><b id="volt">--</b><span>V</span></div>
-<div><b id="a1">--</b><span>①A</span></div>
-<div><b id="a2">--</b><span>②A</span></div>
-<div><b id="rx">--</b><span>rx ①/②</span></div>
+<div><b id="a1">--</b><span>앞 A</span></div>
+<div><b id="a2">--</b><span>뒤 A</span></div>
+<div><b id="rx">--</b><span>rx 앞/뒤</span></div>
 </div>
 <div id="cmds"><span>S <b id="sval">0</b></span><span>T <b id="tval">0</b></span></div>
 <button id="stop">STOP</button>
@@ -388,13 +390,9 @@ select,.row input[type=number]{background:#1d2026;border:1px solid #333;border-r
 </div>
 <div class="row">
 <label><input id="ivs" type="checkbox"> 속도 반전</label>
-<label><input id="ivt" type="checkbox"> 조향 반전</label>
+<label><input id="swp" type="checkbox"> 좌우 바꿈</label>
 </div>
 <div class="row"><span>max</span><input id="mx" type="number" min="0" max="1000" step="50" value="400"><button id="mxset">set</button></div>
-<div class="row">
-<label>구동 <select id="md"><option value="1">탱크 (A=좌 B=우)</option><option value="0">보드 믹싱</option></select></label>
-<label><input id="ivb" type="checkbox"> B 반전</label>
-</div>
 <div class="row"><span>데드밴드</span><input id="db" type="number" min="0" max="1000" step="10" value="200"><button id="dbset">set</button></div>
 <div class="note" id="note"></div>
 </div>
@@ -411,13 +409,12 @@ function push(){q('/api/cmd?s='+S+'&t='+T)}
 function lab(){$('sval').textContent=S;$('tval').textContent=T}
 function opt(k,d){var v=localStorage.getItem(k);return v===null?d:v}
 $('sp').value=opt('sp','0.5');$('sg').value=opt('sg','0.75');
-$('ivs').checked=opt('ivs','0')==='1';$('ivt').checked=opt('ivt','0')==='1';
+$('ivs').checked=opt('ivs','0')==='1';
 $('sp').onchange=function(){localStorage.setItem('sp',this.value)};
 $('sg').onchange=function(){localStorage.setItem('sg',this.value)};
 $('ivs').onchange=function(){localStorage.setItem('ivs',this.checked?'1':'0')};
-$('ivt').onchange=function(){localStorage.setItem('ivt',this.checked?'1':'0')};
 function spVal(){return Math.round(curMax*parseFloat($('sp').value)/10)*10*($('ivs').checked?-1:1)}
-function stVal(){return Math.round(1000*parseFloat($('sg').value)/10)*10*($('ivt').checked?-1:1)}
+function stVal(){return Math.round(1000*parseFloat($('sg').value)/10)*10}
 function bind(id,set,clear){
  var b=$(id);
  b.addEventListener('pointerdown',function(e){try{b.setPointerCapture(e.pointerId)}catch(_){}b.classList.add('on');set();lab();push()});
@@ -443,24 +440,22 @@ window.addEventListener('keyup',function(e){
  $(k[0]).dispatchEvent(new PointerEvent('pointerup'));
 });
 $('mxset').addEventListener('click',function(){q('/api/max?v='+(+$('mx').value||0))});
-$('md').onchange=function(){q('/api/cfg?mode='+this.value)};
-$('ivb').onchange=function(){q('/api/cfg?invb='+(this.checked?1:0))};
+$('swp').onchange=function(){q('/api/cfg?swap='+(this.checked?1:0))};
 $('dbset').addEventListener('click',function(){q('/api/cfg?dead='+(+$('db').value||0))});
-var NOTE={1:'탱크 모드: 좌/우만 눌러도 제자리 회전합니다. 조향 %는 max 기준이며, 어느 바퀴도 max를 넘지 않습니다. 전진을 눌렀는데 제자리에서 돌면 "B 반전"을 바꾸세요.',
- 0:'보드 믹싱: 조향은 주행 중에만 듣습니다 — 전진/후진을 누른 채 좌/우를 함께 누르세요. 조향 %는 풀 조향각 기준이며 max와 무관합니다'};
+$('note').textContent='좌/우만 눌러도 제자리 회전합니다. 조향 %는 max 기준이며 어느 바퀴도 max를 넘지 않습니다. 우를 눌렀는데 왼쪽으로 돌면 "좌우 바꿈"을 켜세요.';
 setInterval(function(){q('/api/ping')},250);
 setInterval(function(){if(S||T)push()},300);
 var pRx=-1,pRx2=0,pT=0;
+function kmh(v){return (v/100).toFixed(2)}
 function poll(){fetch('/api/status').then(function(r){return r.json()}).then(function(j){
  if(j.max!==curMax){curMax=j.max;if(document.activeElement!==$('mx'))$('mx').value=j.max}
- if(document.activeElement!==$('md'))$('md').value=j.mode;
- $('ivb').checked=!!j.invb;
+ $('swp').checked=!!j.swap;
  if(document.activeElement!==$('db'))$('db').value=j.dead;
- $('note').textContent=NOTE[j.mode]||'';
- $('s1l').textContent=(j.spdL/100).toFixed(2);
- $('s1r').textContent=(j.spdR/100).toFixed(2);
- $('s2l').textContent=(j.spdL2/100).toFixed(2);
- $('s2r').textContent=(j.spdR2/100).toFixed(2);
+ // telemetry L is the master's wheel, R the slave's; swap puts the masters on the right
+ $('s1l').textContent=kmh(j.swap?j.spdR:j.spdL);
+ $('s1r').textContent=kmh(j.swap?j.spdL:j.spdR);
+ $('s2l').textContent=kmh(j.swap?j.spdR2:j.spdL2);
+ $('s2r').textContent=kmh(j.swap?j.spdL2:j.spdR2);
  $('volt').textContent=(j.volt/100).toFixed(1);
  $('a1').textContent=((Math.abs(j.ampL)+Math.abs(j.ampR))/100).toFixed(1);
  $('a2').textContent=((Math.abs(j.ampL2)+Math.abs(j.ampR2))/100).toFixed(1);
@@ -498,8 +493,8 @@ static void WebPortal() {
 static void WebCmd() {
   iLastWebAt = g_iNow;
   bWebActive = true;
-  if (oWeb.hasArg("s")) iSpeedTarget = CLAMP((int)oWeb.arg("s").toInt(), -iMaxCmd, iMaxCmd);
-  if (oWeb.hasArg("t")) iSteerTarget = CLAMP((int)oWeb.arg("t").toInt(), -MAX_STEER, MAX_STEER);
+  if (oWeb.hasArg("s")) iSpeedTarget = Still(CLAMP((int)oWeb.arg("s").toInt(), -iMaxCmd, iMaxCmd));
+  if (oWeb.hasArg("t")) iSteerTarget = Still(CLAMP((int)oWeb.arg("t").toInt(), -MAX_STEER, MAX_STEER));
   oWeb.send(200, "text/plain", "ok");
 }
 
@@ -525,20 +520,15 @@ static void WebMax() {
   oWeb.send(200, "text/plain", "ok");
 }
 
-// Drive-mode settings. Like /api/max these do not arm the web watchdog: they
-// change how a command is interpreted, they do not issue one. Mode and invert
-// stop the wheel first -- the links change meaning under it.
+// Vehicle settings. Like /api/max these do not arm the web watchdog: they
+// change how a command is interpreted, they do not issue one. A side swap
+// stops the wheels first -- left and right change meaning under them.
 static void WebCfg() {
   iLastWebAt = g_iNow;
   bool bChanged = false;
-  if (oWeb.hasArg("mode")) {
-    StopNow("mode change (web)");
-    iMode = oWeb.arg("mode").toInt() ? MODE_TANK : MODE_BOARD;
-    bChanged = true;
-  }
-  if (oWeb.hasArg("invb")) {
-    StopNow("link B inverted (web)");
-    bInvertB = oWeb.arg("invb").toInt() != 0;
+  if (oWeb.hasArg("swap")) {
+    StopNow("sides swapped (web)");
+    bSwapLR = oWeb.arg("swap").toInt() != 0;
     bChanged = true;
   }
   if (oWeb.hasArg("dead")) {
@@ -559,14 +549,14 @@ static void WebStatus() {
            "{\"s\":%d,\"t\":%d,\"max\":%d,"
            "\"spdL\":%d,\"spdR\":%d,\"volt\":%d,\"ampL\":%d,\"ampR\":%d,\"rx\":%lu,"
            "\"spdL2\":%d,\"spdR2\":%d,\"volt2\":%d,\"ampL2\":%d,\"ampR2\":%d,\"rx2\":%lu,"
-           "\"outA\":%d,\"outB\":%d,\"mode\":%u,\"invb\":%d,\"dead\":%d,"
+           "\"outL\":%d,\"outR\":%d,\"swap\":%d,\"dead\":%d,"
            "\"cut\":%d,\"why\":\"%s\"}",
            iSpeedTarget, iSteerTarget, iMaxCmd,
            (int)oFb.iSpeedL, (int)oFb.iSpeedR, (int)oFb.iVolt,
            (int)oFb.iAmpL, (int)oFb.iAmpR, (unsigned long)iRxFrames,
            (int)oFb2.iSpeedL, (int)oFb2.iSpeedR, (int)oFb2.iVolt,
            (int)oFb2.iAmpL, (int)oFb2.iAmpR, (unsigned long)iRxFrames2,
-           iOutA, iOutB, (unsigned)iMode, bInvertB ? 1 : 0, iDeadband,
+           iOutL, iOutR, bSwapLR ? 1 : 0, iDeadband,
            bCut ? 1 : 0, bCut ? sCutWhy : "");
   oWeb.send(200, "application/json", aBuf);
 }
@@ -930,23 +920,21 @@ void loop() {
   }
 
   // Dead-man: a dead link must not leave a wheel spinning.
-  // Board mode: link B only participates once it has ever delivered a frame
-  // -- master 2 may simply not be wired yet, and must not veto master 1. Once
-  // it has joined, its silence stops everything: two axles must not disagree
-  // about driving.
-  // Tank mode: link B IS the right wheel, so it must be alive from the start
-  // -- one wheel driving alone is a spin, not a degraded mode.
+  // Each link is a whole axle, so the front axle alone still drives straight
+  // and link B only participates once it has ever delivered a frame -- the
+  // rear master may simply not be wired yet (or be under test on the bench),
+  // and must not veto the front. Once it has joined, its silence stops
+  // everything: two axles must not disagree about driving.
   const bool bAliveA = iLastRxAt && iNow - iLastRxAt <= RX_TIMEOUT_MS;
   const bool bAliveB = iLastRxAt2 && iNow - iLastRxAt2 <= RX_TIMEOUT_MS;
-  const bool bVetoB = iMode == MODE_TANK ? !bAliveB : (iLastRxAt2 && !bAliveB);
+  const bool bVetoB = iLastRxAt2 && !bAliveB;
   if (iNow > QUIET_MS) {
     if (!bAliveA || bVetoB) {
       if (!bCut) {
         bCut = true;
         sCutWhy = !iLastRxAt ? "no telemetry -- board powered on?"
-                : !bAliveA   ? "telemetry lost (master 1)"
-                : !iLastRxAt2 ? "no telemetry from master 2 -- tank mode needs both links"
-                              : "telemetry lost (master 2)";
+                : !bAliveA   ? "telemetry lost (front master, link A)"
+                             : "telemetry lost (rear master, link B)";
         StopNow(sCutWhy);
       }
       iSpeedTarget = iSteerTarget = 0;
@@ -991,27 +979,23 @@ void loop() {
       wSend |= 128;  // STATE_Shutoff, only ever from the 'k' diagnostic
     }
 
-    if (iMode == MODE_TANK) {
-      // Steer is relative to the clamp: full lock at zero speed pivots at
-      // +/-iMaxCmd, and neither wheel ever exceeds iMaxCmd. Positive steer
-      // is a right turn, so the left wheel gets the extra.
-      const int iTurn = (int)((long)iSteerNow * iMaxCmd / 1000);
-      iOutA = Deadband(CLAMP(iSpeedNow + iTurn, -iMaxCmd, iMaxCmd));
-      iOutB = Deadband(CLAMP(iSpeedNow - iTurn, -iMaxCmd, iMaxCmd));
-      if (bInvertB) iOutB = -iOutB;
-      HoverSend(oSerialHover, 0, iOutA, wSend, wSend);
-      HoverSend(oSerialHover2, 0, iOutB, wSend, wSend);
-    } else {
-      iOutA = iOutB = Deadband(iSpeedNow);
-      HoverSend(oSerialHover, STEER_SIGN * iSteerNow, iOutA, wSend, wSend);
-      HoverSend(oSerialHover2, STEER_SIGN * iSteerNow, iOutB, wSend, wSend);
-    }
+    // Steer is relative to the clamp: full lock at zero speed pivots at
+    // +/-iMaxCmd, and no wheel ever exceeds iMaxCmd. Positive steer is a
+    // right turn, so the left wheels get the extra. Both axles get the same
+    // pair. HoverSend() takes the steer field first: that is the slave's wheel.
+    const int iTurn = (int)((long)iSteerNow * iMaxCmd / 1000);
+    iOutL = Deadband(CLAMP(iSpeedNow + iTurn, -iMaxCmd, iMaxCmd));
+    iOutR = Deadband(CLAMP(iSpeedNow - iTurn, -iMaxCmd, iMaxCmd));
+    const int iMasterWheel = bSwapLR ? iOutR : iOutL;
+    const int iSlaveWheel = bSwapLR ? iOutL : iOutR;
+    HoverSend(oSerialHover, iSlaveWheel, iMasterWheel, wSend, wSend);
+    HoverSend(oSerialHover2, iSlaveWheel, iMasterWheel, wSend, wSend);
   }
 
   if (iNow > iNextReport) {
     iNextReport = iNow + REPORT_MILLIS;
-    // Fields for master 2 and the per-link wire values are appended AFTER
-    // "rx N" -- hoverctl.py's regex has no end anchor, so the line stays
+    // Fields for master 2 and the per-side wire values (out L R) are appended
+    // AFTER "rx N" -- hoverctl.py's regex has no end anchor, so the line stays
     // parseable by the existing GUI.
     Serial.printf("cmd s%4d>%4d t%4d>%4d | meas %6.2f %6.2f km/h | %5.2f %5.2f A "
                   "| %5.2f V | odo %ld %ld | rx %lu | m2 %6.2f %6.2f km/h "
@@ -1022,6 +1006,6 @@ void loop() {
                   (long)oFb.iOdomL, (long)oFb.iOdomR, (unsigned long)iRxFrames,
                   oFb2.iSpeedL / 100.0, oFb2.iSpeedR / 100.0,
                   oFb2.iAmpL / 100.0, oFb2.iAmpR / 100.0, oFb2.iVolt / 100.0,
-                  (unsigned long)iRxFrames2, iOutA, iOutB);
+                  (unsigned long)iRxFrames2, iOutL, iOutR);
   }
 }

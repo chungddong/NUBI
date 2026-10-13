@@ -46,6 +46,8 @@
   갱신합니다.
 - 이 저장소 밖의 파일(`F:\Develop\`의 다른 폴더, Jetson · RDK 보드)을 옮기거나 지울 때는 먼저
   사용자에게 확인합니다.
+- 호버보드 메인보드 펌웨어(GPL-3.0 업스트림을 고친 것)와 그 빌드 · 굽기 기록은 `firmware/hoverboard-mainboard/`에
+  로컬로만 둡니다(git 제외). 공개 문서에는 바퀴 제어기와 맞닿는 인터페이스만 적습니다.
 - 이 저장소는 아직 비공개입니다. 원격을 붙이거나 푸시하기 전에
   [docs/guides/before-publishing.md](docs/guides/before-publishing.md)를 끝까지 따릅니다(라이선스, 이력 정리).
 - `F:\Develop\freecadAI`의 av-platform CAD는 쓰지 않기로 했습니다. 참고하거나 가져오지 않습니다.
