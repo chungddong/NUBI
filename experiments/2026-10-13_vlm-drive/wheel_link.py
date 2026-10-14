@@ -109,6 +109,7 @@ class WheelLink:
                 if r:
                     self.report = r
                 elif line:
+                    line = re.sub(r'pass "[^"]*"', 'pass "***"', line)   # 부팅 때 찍는 Wi-Fi 비밀번호는 기록하지 않는다
                     self.events.append((time.monotonic(), line))
 
     def _heartbeat(self):
@@ -127,14 +128,17 @@ class WheelLink:
         """이 시간 동안 하트비트를 보낸다. 제어 루프가 걸음마다 부른다."""
         self._lease_until = time.monotonic() + seconds
 
-    def wait_ready(self, timeout=6.0):
-        """앞축 보드 텔레메트리 (rx 가 늘어남) 를 기다린다. 리셋 직후 2 s 는 펌웨어가 듣기만 한다."""
+    def wait_ready(self, timeout=6.0, need_board=True):
+        """앞축 보드 텔레메트리 (rx 가 늘어남) 를 기다린다. 리셋 직후 2 s 는 펌웨어가 듣기만 한다.
+        need_board=False 면 ESP32 보고 줄만 와도 돌려준다 (보드 전원이 꺼져 있어도 ESP32 점검)."""
         t0 = time.monotonic()
         first = None
         while time.monotonic() - t0 < timeout:
             r = self.report
             if r and first is None:
                 first = r
+                if not need_board:
+                    return r
             if r and first and r.rx > first.rx:
                 return r
             time.sleep(0.05)

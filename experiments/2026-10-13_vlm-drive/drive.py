@@ -29,6 +29,18 @@ from wheel_link import WheelLink, open_serial  # noqa: E402
 D2R = math.pi / 180
 
 
+def stop_on_signals():
+    """강제 종료 (SIGTERM) · SSH 끊김 (SIGHUP) 도 Ctrl+C 처럼 — finally 에서 바퀴를 세우고 카메라를 닫는다.
+    카메라를 닫지 않고 죽으면 Xtion 이 걸린 상태가 되어 USB 를 다시 꽂아야 한다 (2026-10-14)."""
+    import signal
+
+    def _raise(*_):
+        raise KeyboardInterrupt
+    for s in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, s) and signal.getsignal(getattr(signal, s)) is not signal.SIG_IGN:   # nohup 으로 띄우면 SIGHUP 은 그대로 무시
+            signal.signal(getattr(signal, s), _raise)
+
+
 def load_driver(model):
     if model.startswith("claude-"):
         import agent_claude as d
@@ -39,6 +51,8 @@ def load_driver(model):
 
 def setup_ground(cam, cfg):
     f = cam.read()
+    if f is None:
+        raise SystemExit("카메라 프레임이 안 온다")
     g = fit_floor(f.depth, f.K)
     if g is None:
         if cfg.get("camera_height_m") is None:
@@ -66,6 +80,7 @@ def main():
     ap.add_argument("--config", default=str(HERE / "robot.json"))
     ap.add_argument("--log-dir", default=str(REPO / "data/logs/vlm-drive"))
     a = ap.parse_args()
+    stop_on_signals()
 
     cfg = json.loads(Path(a.config).read_text(encoding="utf-8"))
     hm = HallwayMap(find_scene(a.scene))
@@ -104,7 +119,8 @@ def main():
         link.arm(cfg["max_cmd"])
 
         def sense():
-            return an.analyze(cam.read().depth, cfg["blind_frac"])["gap_ahead"]
+            f = cam.read(timeout=0.5)
+            return 0.0 if f is None else an.analyze(f.depth, cfg["blind_frac"])["gap_ahead"]   # 깊이가 안 오면 막힘
 
         motion = Motion(link, odo, cfg, sense)
         motion._settle(0.4)                                   # 오도메트리 기준점
@@ -112,6 +128,9 @@ def main():
         history, memory = [], ""
         for step in range(1, a.max_steps + 1):
             f = cam.read()
+            if f is None:
+                print("카메라 프레임이 안 온다 — 멈춤")
+                break
             view = an.analyze(f.depth, cfg["blind_frac"])
             cands = candidates(view["cols"])
             img = draw_arrows(f.bgr, cands, f.K, g)

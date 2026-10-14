@@ -134,12 +134,13 @@ class FakeWheelSerial:
                 if not self.blocked(nx, ny):
                     self.x, self.y = nx, ny
                 self.yaw = math.atan2(math.sin(nyaw), math.cos(nyaw))
-                self.odo_m += vr * dt / STEP_TRUE        # 바퀴는 막혀도 헛돈다
-                self.odo_s -= vl * dt / STEP_TRUE        # 슬레이브 모터는 거울로 붙어 거꾸로 센다
+                # 실물 (2026-10-14 바퀴 점검): 앞으로 갈 때 마스터 (오른쪽) 스텝은 −, 슬레이브 (왼쪽) 는 +, 속도는 왼쪽 바퀴가 −
+                self.odo_m -= vr * dt / STEP_TRUE        # 바퀴는 막혀도 헛돈다
+                self.odo_s += vl * dt / STEP_TRUE
                 self.rx += 1
                 if now >= next_report:
                     next_report = now + 0.2
-                    kr, kl = vr * 3.6, vl * 3.6
+                    kr, kl = vr * 3.6, -vl * 3.6
                     self._out += (f"cmd s{self.s_n:4d}>{self.s_t:4d} t{self.t_n:4d}>{self.t_t:4d} | meas {kr:6.2f} {kl:6.2f} km/h | "
                                   f" 0.50  0.50 A | 38.20 V | odo {int(self.odo_m)} {int(self.odo_s)} | rx {self.rx} | "
                                   f"m2 {kr:6.2f} {kl:6.2f} km/h  0.50  0.50 A 38.20 V rx2 {self.rx} | out {outl} {outr}\n").encode()
@@ -160,7 +161,7 @@ class FakeCamera:
         seg = np.array(robot.segs, dtype=float)
         self.A, self.B = seg[:, :2], seg[:, 2:]
 
-    def read(self):
+    def read(self, timeout=None):
         rb = self.robot
         c, s = math.cos(rb.yaw), math.sin(rb.yaw)
         ox, oy, oz = rb.x + self.cam_x * c, rb.y + self.cam_x * s, self.cam_h

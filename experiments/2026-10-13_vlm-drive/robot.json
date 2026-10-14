@@ -13,7 +13,7 @@
   "max_move_m": 1.5,
   "margin_m": 0.3,
   "m_per_step": 0.00576,
-  "odo_sign": [1, -1],
+  "odo_sign": [-1, 1],
   "track_eff_m": 0.79,
   "camera_x_m": 0.38,
   "camera_height_m": null,

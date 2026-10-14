@@ -9,6 +9,19 @@
         "8748"
       ],
       "port": 8748
+    },
+    {
+      "name": "wheel-bench-fake",
+      "runtimeExecutable": "experiments/2026-10-13_vlm-drive/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "experiments/2026-10-13_vlm-drive/bench.py",
+        "--fake",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8091"
+      ],
+      "port": 8091
     }
   ]
 }

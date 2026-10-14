@@ -20,6 +20,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 
+from drive import stop_on_signals  # noqa: E402
 from wheel_link import WheelLink, open_serial  # noqa: E402
 
 
@@ -31,7 +32,7 @@ def connect(a):
     else:
         ser = open_serial(a.port)
     link = WheelLink(ser)
-    r = link.wait_ready()
+    r = link.wait_ready(need_board=a.what != "report")
     print(f"바퀴 제어기 {link.port}: 전압 {r.volt:.1f} V · 앞축 rx {r.rx} · 뒤축 rx2 {r.rx_b} · odo {r.odo}")
     return link, ser
 
@@ -69,6 +70,7 @@ def main():
     ap.add_argument("--fake", action="store_true")
     ap.add_argument("--write", action="store_true", help="잰 값을 robot.json 에 적는다")
     a = ap.parse_args()
+    stop_on_signals()
     cfg_path = HERE / "robot.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
 
@@ -84,6 +86,9 @@ def main():
             cam = XtionCamera()
         try:
             f = cam.read()
+            if f is None:
+                print("카메라 프레임이 안 온다")
+                return
             print(f"깊이 {f.depth.shape[1]}×{f.depth.shape[0]}, 값 있는 픽셀 {(f.depth > 0).mean():.0%}, "
                   f"화각 {math.degrees(2 * math.atan(f.depth.shape[1] / 2 / f.K[0])):.1f}° × {math.degrees(2 * math.atan(f.depth.shape[0] / 2 / f.K[1])):.1f}°")
             g = fit_floor(f.depth, f.K)
@@ -111,8 +116,11 @@ def main():
                 r = link.report
                 print(f"  s {r.speed_now:4d} t {r.steer_now:4d} | {r.kmh[0]:6.2f} {r.kmh[1]:6.2f} km/h | {r.volt:5.2f} V | odo {r.odo} | rx {r.rx} rx2 {r.rx_b}")
                 time.sleep(0.5)
-            for t, line in list(link.events)[-5:]:
+            for t, line in list(link.events)[-8:]:
                 print("  알림:", line)
+            r = link.report
+            print("→ " + ("보드 텔레메트리가 들어온다 (rx 증가)" if r and r.rx > 0 else
+                          "ESP32 는 응답하지만 메인보드 텔레메트리가 없다 — 보드 전원 (배터리 · 전원 버튼) · 링크 A 배선"))
             return
 
         if a.what == "straight":
