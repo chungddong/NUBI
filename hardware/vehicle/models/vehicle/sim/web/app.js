@@ -542,3 +542,42 @@ window.__sim = {
 };
 // ⑤ GPT 운전 (카메라만) — agent.js · ../agent.py
 window.__sim.agent = makeAgent({ sim: window.__sim, sensors, course, st, place, $, data });
+
+// ⑥ 실차 운전 프로그램과 연결 (?bridge=1) — drive.py --sim 이 가상 ESP32 의 자세를 보내면 차를 그 자리에 두고,
+//    부탁한 카메라 (Xtion 컬러 · 깊이) 를 3D 지도에서 그려 돌려준다. 바퀴 명령 · 위치 추정은 왼쪽 아래에 보인다 (serve.py).
+if (new URLSearchParams(location.search).get('bridge') === '1') {
+  if (course.setMovers) course.setMovers(false);              // 가상 ESP32 는 벽만 안다 — 사람은 끈다
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:20;max-width:46vw;padding:8px 12px;border-radius:8px;'
+    + 'background:rgba(20,20,20,.78);color:#f2f2f2;font:13px/1.5 system-ui,"Malgun Gothic",sans-serif;white-space:pre-wrap';
+  box.textContent = '연결 대기 — drive.py --sim 을 띄우면 여기서 움직인다';
+  document.body.appendChild(box);
+  const b64 = (u8) => { let t = ''; for (let i = 0; i < u8.length; i += 0x8000) t += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(t); };
+  (async function bridgeLoop() {
+    for (;;) {
+      let job;
+      try {
+        job = await (await fetch('/api/bridge/next')).json();
+      } catch (e) {
+        box.textContent = '시뮬레이터 서버와 연결이 끊김';
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      if (!job.seq) continue;
+      if (job.pose) {
+        Object.assign(st, { x: job.pose.x, y: job.pose.y, yaw: job.pose.yaw, v: 0, w: 0 });
+        updatePose();
+      }
+      if (job.status) box.textContent = job.status;
+      if (job.views && job.views.length) {
+        const views = {};
+        for (const v of job.views) {
+          const r = sensors.renderView(v);
+          views[v.name] = { jpg: r.jpg, depth: b64(new Uint8Array(r.depth.buffer)), w: r.w, h: r.h };
+        }
+        await fetch('/api/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ seq: job.seq, views }) });
+      }
+    }
+  })();
+}

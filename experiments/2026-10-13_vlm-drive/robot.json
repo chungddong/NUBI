@@ -9,14 +9,25 @@
   "min_speed_mps": 0.08,
   "steer_fix_k": 300,
   "steer_fix_max": 150,
-  "stop_gap_m": 0.30,
+  "stop_gap_m": 0.3,
   "max_move_m": 1.5,
   "margin_m": 0.3,
-  "m_per_step": 0.00576,
-  "odo_sign": [-1, 1],
-  "track_eff_m": 0.79,
+  "m_per_step": 0.0059,
+  "odo_sign": [
+    -1,
+    1
+  ],
+  "track_eff_m": 0.92,
   "camera_x_m": 0.38,
-  "camera_height_m": null,
-  "camera_pitch_deg": null,
-  "blind_frac": 0.6
+  "camera_height_m": 0.3,
+  "camera_pitch_deg": -2.5,
+  "blind_frac": 0.6,
+  "odo_scale": [
+    1.01,
+    1.0
+  ],
+  "webcam_x_m": 0.35,
+  "webcam_y_m": 0.0,
+  "webcam_yaw_deg": 5.5,
+  "webcam_hfov_deg": 70.0
 }

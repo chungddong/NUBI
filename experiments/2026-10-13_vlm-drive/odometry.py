@@ -14,6 +14,7 @@ class Odometry:
         self.m = cfg["m_per_step"]
         self.sign = cfg["odo_sign"]                  # [마스터 = 오른쪽, 슬레이브 = 왼쪽]
         self.track = cfg["track_eff_m"]
+        self.scale = cfg.get("odo_scale", [1.0, 1.0])     # 바퀴마다 스텝 거리 비 (오른쪽, 왼쪽) — 타이어 지름 차
         self.x, self.y, self.yaw = start
         self.sigma = 0.05
         self.last = None
@@ -24,8 +25,8 @@ class Odometry:
         if self.last is None:
             self.last = odo
             return
-        dr = (odo[0] - self.last[0]) * self.sign[0] * self.m     # 오른쪽 바퀴
-        dl = (odo[1] - self.last[1]) * self.sign[1] * self.m     # 왼쪽 바퀴
+        dr = (odo[0] - self.last[0]) * self.sign[0] * self.m * self.scale[0]     # 오른쪽 바퀴
+        dl = (odo[1] - self.last[1]) * self.sign[1] * self.m * self.scale[1]     # 왼쪽 바퀴
         self.last = odo
         if abs(dr) > 1.0 or abs(dl) > 1.0:           # 보고 줄 사이 (0.2 s) 1 m 넘게 = 보드가 다시 켜져 카운터가 바뀜
             self.jumps += 1

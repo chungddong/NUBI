@@ -1,13 +1,17 @@
 """실차 보정 — 연결 확인 · 카메라 바닥면 · 직진 / 제자리 회전으로 오도메트리 값 재기.
 
-    python3 calibrate.py report                       보고 줄 3 s (움직이지 않음)
-    python3 calibrate.py camera                       Xtion 바닥면 · 화살표 → data/logs/vlm-drive/calib_camera.jpg
-    python3 calibrate.py straight --cmd 180 --seconds 2   곧게 가고 홀 스텝을 센다 → 줄자로 잰 거리를 넣으면 m_per_step · odo_sign
-    python3 calibrate.py spin --cmd 500 --seconds 3       왼쪽 제자리 회전 → 잰 각도를 넣으면 track_eff_m
-    (--fake 를 붙이면 가짜 장치로 연습)
+    python3 calibrate.py report                  보고 줄 3 s (움직이지 않음)
+    python3 calibrate.py camera                  Xtion 바닥면 · 화살표 → data/logs/vlm-drive/calib_camera.jpg
+    python3 calibrate.py straight --runs 3       곧게 2 s → 앞바퀴 두 표시의 이동 거리 (mm) → m_per_step · odo_sign
+    python3 calibrate.py spin --runs 2           왼쪽 · 오른쪽 번갈아 오도메트리로 한 바퀴 → 왼쪽 두 바퀴 표시가 처음 선에서 벗어난 거리 (mm)
+                                                 → 실제로 돈 각도 → track_eff_m
+    (--fake 를 붙이면 가짜 장치로 연습, --write 를 주면 여러 번 잰 평균을 robot.json 에 적는다)
 
-움직이기 전에 묻는다. 처음에는 바퀴를 띄우고 방향만 보고, 그다음 바닥에서 앞 2 m 를 비우고 잰다.
-결과는 화면에 robot.json 에 적을 값으로 보여 준다 (--write 를 주면 robot.json 을 고친다).
+재는 법 (기준점 · 표시 붙이는 자리) 은 README '바닥 보정'. 요점:
+- 기준점은 바퀴 축 중심 (허브 바깥 면 한가운데) 바로 아래 바닥. 직각자를 허브 중심에 대고 바닥에 표시한다.
+- 직진: 앞 왼쪽 · 앞 오른쪽 바퀴 표시를 출발 전 · 멈춘 뒤 찍어 둘의 이동 거리를 따로 잰다 (오도메트리는 앞축으로 센다).
+- 회전: 출발 전 앞 왼쪽 · 뒤 왼쪽 바퀴 표시를 지나는 긴 직선을 바닥에 붙여 두고, 한 바퀴 돈 뒤 같은 두 바퀴 표시가
+  그 선에서 수직으로 얼마나 벗어났는지 잰다 (선 바깥 = +, 차 밑 쪽 = −). 각도 = 360° ± asin((앞 − 뒤) / 휠베이스).
 """
 
 import argparse
@@ -23,6 +27,9 @@ REPO = HERE.parents[1]
 from drive import stop_on_signals  # noqa: E402
 from wheel_link import WheelLink, open_serial  # noqa: E402
 
+WHEELBASE_MM = 420.0      # 앞뒤 바퀴 축 사이 (차체 설계 v29, AXLE_X ±210)
+TREAD_MM = 527.4          # 좌우 바퀴 중심 사이 (v29 트레드)
+
 
 def connect(a):
     if a.fake:
@@ -37,9 +44,9 @@ def connect(a):
     return link, ser
 
 
-def run_for(link, speed, steer, seconds):
+def run_for(link, cfg, speed, steer, seconds):
     odo0 = link.report.odo
-    link.arm(400)
+    link.arm(cfg["max_cmd"])                  # 운전 (drive.py) 과 같은 상한 — t 는 상한에 대한 비율이다
     t0 = time.monotonic()
     try:
         while time.monotonic() - t0 < seconds:
@@ -54,6 +61,37 @@ def run_for(link, speed, steer, seconds):
     return odo1[0] - odo0[0], odo1[1] - odo0[1]
 
 
+def spin_turn(link, cfg, left=True, turns=1.0, timeout=40.0):
+    """지금 robot.json 값 (track_eff_m) 의 오도메트리로 turns 바퀴를 돈다. 실제로는 그 값이 틀린 만큼 더 / 덜 돈다.
+    돌려주는 것: 앞축 (마스터, 슬레이브) 스텝 변화."""
+    sr, sl, m = cfg["odo_sign"][0], cfg["odo_sign"][1], cfg["m_per_step"]
+    need = cfg["track_eff_m"] * 2 * math.pi * turns              # 바깥 − 안쪽 바퀴 거리 (m)
+    odo0 = link.report.odo
+    link.arm(cfg["max_cmd"])
+    t0 = time.monotonic()
+    try:
+        while True:
+            link.lease()
+            o = link.report.odo
+            dr, dl = (o[0] - odo0[0]) * sr * m, (o[1] - odo0[1]) * sl * m
+            done = (dr - dl) if left else (dl - dr)
+            if done >= need:
+                break
+            if time.monotonic() - t0 > timeout:
+                print(f"  시간 초과 ({timeout:.0f} s) — 오도메트리로 {math.degrees(done / cfg['track_eff_m']):.0f}° 에서 멈춤")
+                break
+            rest = math.degrees((need - done) / cfg["track_eff_m"])
+            mag = cfg["turn_cmd"] if rest > 30 else cfg["turn_cmd_slow"]
+            link.drive(0, -mag if left else mag)                   # t 는 + 가 오른쪽 회전
+            time.sleep(0.05)
+    finally:
+        link.stop()
+    time.sleep(0.8)
+    link.lease()
+    o = link.report.odo
+    return o[0] - odo0[0], o[1] - odo0[1]
+
+
 def ask(prompt):
     try:
         return input(prompt).strip()
@@ -61,11 +99,24 @@ def ask(prompt):
         return ""
 
 
+def ask_float(prompt):
+    while True:
+        v = ask(prompt)
+        if not v:
+            return None
+        try:
+            return float(v)
+        except ValueError:
+            print("  숫자로 (모르면 Enter)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=["report", "camera", "straight", "spin"])
-    ap.add_argument("--cmd", type=int, default=None)
-    ap.add_argument("--seconds", type=float, default=None)
+    ap.add_argument("--cmd", type=int, default=None, help="straight: 속도 명령 (기본 robot.json fwd_cmd)")
+    ap.add_argument("--seconds", type=float, default=None, help="straight: 가는 시간 (기본 2 s)")
+    ap.add_argument("--runs", type=int, default=1, help="몇 번 재서 평균낼지")
+    ap.add_argument("--right", action="store_true", help="spin: 오른쪽부터 돈다 (기본 왼쪽부터, 번갈아)")
     ap.add_argument("--port")
     ap.add_argument("--fake", action="store_true")
     ap.add_argument("--write", action="store_true", help="잰 값을 robot.json 에 적는다")
@@ -125,39 +176,82 @@ def main():
 
         if a.what == "straight":
             cmd, sec = a.cmd or cfg["fwd_cmd"], a.seconds or 2.0
-            if ask(f"앞으로 s {cmd} 를 {sec} s — 앞 2 m 가 비었나? (y = 출발) > ").lower() != "y":
-                return
-            dm, ds = run_for(link, cmd, 0, sec)
-            print(f"홀 스텝: 마스터 (오른쪽) {dm:+d}, 슬레이브 (왼쪽) {ds:+d}")
-            if dm == 0 or ds == 0:
-                print("한쪽이 0 — 바퀴가 안 돌았거나 (듀티 부족 · 보드) 텔레메트리 문제. fwd_cmd 를 올리거나 배선 확인")
-                return
-            sign = [1 if dm > 0 else -1, 1 if ds > 0 else -1]
-            meas = ask("줄자로 잰 이동 거리 (m, 모르면 Enter) > ")
-            if a.fake and not meas:
-                meas = f"{math.hypot(ser.x - 1.4, ser.y):.3f}"
-                print(f"  (가짜 장치의 진짜 거리 {meas} m 를 쓴다)")
-            print(f"→ odo_sign = {sign}")
-            if meas:
-                m = float(meas) / ((abs(dm) + abs(ds)) / 2)
-                print(f"→ m_per_step = {m:.6f}  (지금 robot.json: {cfg['m_per_step']})")
-                cfg.update(odo_sign=sign, m_per_step=round(m, 6))
+            got = []                                                 # (오른쪽 스텝, 왼쪽 스텝, 오른쪽 mm, 왼쪽 mm)
+            for k in range(a.runs):
+                print(f"\n[{k + 1}/{a.runs}] 앞 왼쪽 · 앞 오른쪽 바퀴 축 아래에 출발 표시를 했나?")
+                if ask(f"앞으로 s {cmd} 를 {sec} s — 앞 2.5 m 가 비었나? (y = 출발) > ").lower() != "y":
+                    break
+                x0, y0 = getattr(ser, "x", 0.0), getattr(ser, "y", 0.0)
+                dm, ds = run_for(link, cfg, cmd, 0, sec)
+                print(f"  홀 스텝: 마스터 (오른쪽) {dm:+d}, 슬레이브 (왼쪽) {ds:+d}")
+                if dm == 0 or ds == 0:
+                    print("  한쪽이 0 — 바퀴가 안 돌았거나 (듀티 부족 · 보드) 텔레메트리 문제. --cmd 를 올리거나 배선 확인")
+                    break
+                sign = [1 if dm > 0 else -1, 1 if ds > 0 else -1]
+                if sign != cfg["odo_sign"]:
+                    print(f"  ! odo_sign 이 robot.json ({cfg['odo_sign']}) 과 다르다 → {sign} (바퀴가 뒤로 갔거나 보드 방향이 바뀜)")
+                cfg["odo_sign"] = sign
+                L = ask_float("  앞 왼쪽 바퀴 표시 사이 거리 (mm) > ")
+                R = ask_float("  앞 오른쪽 바퀴 표시 사이 거리 (mm) > ")
+                if a.fake and L is None and R is None:
+                    L = R = 1000 * math.hypot(ser.x - x0, ser.y - y0)
+                    print(f"  (가짜 장치의 진짜 거리 {L:.0f} mm 를 쓴다)")
+                if L is None or R is None:
+                    print("  거리를 안 넣어 이번 것은 뺀다")
+                    continue
+                got.append((abs(dm), abs(ds), R, L))
+                print(f"  → 스텝당 오른쪽 {R / abs(dm):.3f} mm · 왼쪽 {L / abs(ds):.3f} mm, "
+                      f"가는 동안 방향이 {math.degrees((R - L) / TREAD_MM):+.1f}° 틀어짐 (+ = 왼쪽)")
+            if got:
+                g = list(zip(*got))
+                m = (sum(g[2]) + sum(g[3])) / 1000 / (sum(g[0]) + sum(g[1]))
+                each = [(r + l) / 1000 / (sr + sl) for sr, sl, r, l in got]
+                print(f"\n→ m_per_step = {m:.6f}  ({len(got)} 번, 한 번씩 {', '.join(f'{v:.6f}' for v in each)}; "
+                      f"지금 robot.json {cfg['m_per_step']})")
+                print(f"  바퀴별: 오른쪽 {sum(g[2]) / sum(g[0]) / 1000:.6f}, 왼쪽 {sum(g[3]) / sum(g[1]) / 1000:.6f} "
+                      f"(이론값: 바퀴 지름 158.7 mm · 한 바퀴 90 스텝이면 {math.pi * 0.1587 / 90:.6f})")
+                cfg.update(m_per_step=round(m, 6))
+            else:
+                a.write = False
         else:
-            cmd, sec = a.cmd or cfg["turn_cmd"], a.seconds or 3.0
-            if ask(f"왼쪽 제자리 회전 t -{cmd} 를 {sec} s — 둘레가 비었나? (y = 출발) > ").lower() != "y":
-                return
-            y0 = getattr(ser, "yaw", 0.0)
-            dm, ds = run_for(link, 0, -cmd, sec)
-            dr, dl = dm * cfg["odo_sign"][0] * cfg["m_per_step"], ds * cfg["odo_sign"][1] * cfg["m_per_step"]
-            print(f"바퀴 거리: 오른쪽 {dr:+.3f} m, 왼쪽 {dl:+.3f} m (왼쪽 회전이면 오른쪽 +, 왼쪽 −)")
-            meas = ask("실제로 돈 각도 (도, 왼쪽 +, 모르면 Enter) > ")
-            if a.fake and not meas:
-                meas = f"{math.degrees(ser.yaw - y0):.1f}"
-                print(f"  (가짜 장치의 진짜 각도 {meas}° 를 쓴다)")
-            if meas and float(meas) != 0:
-                tr = (dr - dl) / math.radians(float(meas))
-                print(f"→ track_eff_m = {tr:.3f}  (실제 윤거 0.527 m, 지금 robot.json: {cfg['track_eff_m']})")
+            got = []                                                 # (바깥 − 안쪽 바퀴 거리 m, 실제 각도 rad, 왼쪽?)
+            for k in range(a.runs):
+                left = (k % 2 == 0) != a.right                       # 왼쪽 · 오른쪽 번갈아 — 평균이 한쪽으로 치우치지 않게
+                side = "왼쪽" if left else "오른쪽"
+                print(f"\n[{k + 1}/{a.runs}] 앞 왼쪽 · 뒤 왼쪽 바퀴 축 아래를 지나는 긴 직선을 바닥에 붙였나?")
+                if ask(f"{side} 제자리 한 바퀴 (오도메트리 기준) — 둘레 1 m 가 비었나? (y = 출발) > ").lower() != "y":
+                    break
+                y0 = getattr(ser, "yaw_total", 0.0)
+                dm, ds = spin_turn(link, cfg, left)
+                dr, dl = dm * cfg["odo_sign"][0] * cfg["m_per_step"], ds * cfg["odo_sign"][1] * cfg["m_per_step"]
+                diff = (dr - dl) if left else (dl - dr)
+                print(f"  바퀴 거리: 오른쪽 {dr:+.3f} m, 왼쪽 {dl:+.3f} m → 오도메트리 각도 "
+                      f"{math.degrees(diff / cfg['track_eff_m']):.1f}° (지금 track_eff_m {cfg['track_eff_m']})")
+                fo = ask_float("  앞 왼쪽 바퀴 표시가 선에서 벗어난 거리 (mm, 선 바깥 + · 차 밑 쪽 −, 모르면 Enter) > ")
+                ro = ask_float("  뒤 왼쪽 바퀴 표시가 선에서 벗어난 거리 (mm, 같은 부호) > ") if fo is not None else None
+                if fo is not None and ro is not None:
+                    eps = math.degrees(math.asin(max(-1.0, min(1.0, (fo - ro) / WHEELBASE_MM))))
+                    deg = 360.0 + (eps if left else -eps)
+                    print(f"  → 한 바퀴에서 {deg - 360:+.1f}° → 실제 {deg:.1f}°")
+                else:
+                    deg = ask_float("  실제로 돈 각도 (도, 한 바퀴면 360 근처, 모르면 Enter) > ")
+                    if a.fake and deg is None and hasattr(ser, "yaw_total"):
+                        deg = abs(math.degrees(ser.yaw_total - y0))
+                        print(f"  (가짜 장치의 진짜 각도 {deg:.1f}° 를 쓴다)")
+                if not deg:
+                    print("  각도를 안 넣어 이번 것은 뺀다")
+                    continue
+                got.append((diff, math.radians(deg), left))
+                print(f"  → 이번 track_eff_m = {diff / math.radians(deg):.3f}")
+            if got:
+                tr = sum(g[0] for g in got) / sum(g[1] for g in got)
+                per = {n: [g for g in got if g[2] == lf] for n, lf in (("왼쪽", True), ("오른쪽", False))}
+                each = ", ".join(f"{n} {sum(g[0] for g in v) / sum(g[1] for g in v):.3f} ({len(v)} 번)" for n, v in per.items() if v)
+                print(f"\n→ track_eff_m = {tr:.3f}  ({each}; 실제 트레드 {TREAD_MM / 1000:.3f} m, "
+                      f"지금 robot.json {cfg['track_eff_m']})")
                 cfg.update(track_eff_m=round(tr, 3))
+            else:
+                a.write = False
         if a.write:
             cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             print(f"robot.json 에 적었다")

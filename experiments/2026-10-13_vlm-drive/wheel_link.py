@@ -11,6 +11,7 @@
 제어 루프가 멈추면 (예외 · 멈춤 · GPT 응답 기다림) 하트비트가 끊기고 1 s 뒤 ESP32 가 스스로 선다.
 """
 
+import os
 import re
 import threading
 import time
@@ -75,6 +76,8 @@ def open_serial(port=None):
     s.port, s.baudrate, s.timeout = port or find_port(), BAUD, 0.1
     s.dtr = False                # 열 때 ESP32 를 리셋하지 않게 (리눅스에서는 그래도 리셋될 수 있다 — 아래 wait_ready)
     s.rts = False
+    if os.name == "posix":
+        s.exclusive = True       # bench.py · pad.py · drive.py 가 한 포트에 같이 쓰지 않게 (flock). 윈도우 COM 은 원래 혼자 연다
     s.open()
     return s
 

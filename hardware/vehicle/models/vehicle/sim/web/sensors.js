@@ -252,6 +252,67 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
     return { canvas: cv, w, h, f, cam: front.c };
   }
 
+  // ---------------------------------------------------------------- 임의 자세에서 렌더 (실차 사진과 비교 — 3D 지도로 위치 찾기 시험)
+  // pos: 장면 좌표 [x, y, z] (m). R: 카메라 축 (열 = 오른쪽 · 아래 · 앞, OpenCV 식) 을 장면 좌표로 쓴 3×3.
+  // K: [fx, fy, cx, cy] (cx, cy 는 가운데로 본다), size: [w, h]. 차 · 센서 표시는 빼고 천장은 넣는다.
+  // 돌려줌: { jpg (dataURL), depth (Uint16Array, mm, 광축 거리 = 깊이 카메라와 같은 뜻, 0 = 값 없음), w, h }
+  let viewRT = null;
+  const depthMat = new THREE.ShaderMaterial({
+    vertexShader: 'varying float vz; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vz = -mv.z; gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying float vz; void main() { gl_FragColor = vec4(vz, 0.0, 0.0, 1.0); }',
+    side: THREE.DoubleSide,
+  });
+  function renderView({ pos, R, K, size }) {
+    const [w, h] = size, [fx, fy] = K;
+    const cam = new THREE.PerspectiveCamera(2 * Math.atan(h / 2 / fy) / D2R, (w / 2 / fx) / (h / 2 / fy), 0.05, 60);
+    if (course.ceilLayer) cam.layers.enable(course.ceilLayer);
+    const col = (j, s) => new THREE.Vector3(s * R[0][j], s * R[1][j], s * R[2][j]);
+    cam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(col(0, 1), col(1, -1), col(2, -1)));   // three: y 위 · z 뒤
+    cam.position.set(pos[0], pos[1], pos[2]);
+    cam.updateMatrixWorld(true);
+    if (!viewRT || viewRT.width !== w || viewRT.height !== h) {
+      viewRT?.dispose();
+      viewRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType });
+    }
+    const buf = new Float32Array(w * h * 4);
+    const hide = [ptsObj, car];
+    if (lidar) hide.push(lidar.pts, lidar.lines);
+    const was = hide.map((o) => o.visible);
+    hide.forEach((o) => { o.visible = false; });
+    renderer.setRenderTarget(viewRT);
+    renderer.render(scene, cam);
+    renderer.readRenderTargetPixels(viewRT, 0, 0, w, h, buf);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    const img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4, dst = y * w * 4;
+      for (let x = 0; x < 4 * w; x += 4) {
+        for (let ch = 0; ch < 3; ch++) img.data[dst + x + ch] = SRGB[Math.min(4095, Math.max(0, Math.round(buf[src + x + ch] * 4095)))];
+        img.data[dst + x + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const bg = scene.background, fog = scene.fog, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
+    scene.background = null; scene.fog = null; scene.overrideMaterial = depthMat;
+    renderer.setClearColor(0x000000, 0);
+    renderer.render(scene, cam);
+    renderer.readRenderTargetPixels(viewRT, 0, 0, w, h, buf);
+    scene.overrideMaterial = null; scene.background = bg; scene.fog = fog;
+    renderer.setClearColor(cc, ca);
+    renderer.setRenderTarget(null);
+    hide.forEach((o, i) => { o.visible = was[i]; });
+    const depth = new Uint16Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = buf[((h - 1 - y) * w + x) * 4];
+        depth[y * w + x] = v > 0.05 && v < 60 ? Math.round(v * 1000) : 0;
+      }
+    }
+    return { jpg: cv.toDataURL('image/jpeg', 0.92), depth, w, h };
+  }
+
   // ---------------------------------------------------------------- 전조등
   const spots = [];
   for (const h of data.headlights) {
@@ -302,7 +363,7 @@ export function makeSensors({ scene, renderer, car, data, course, THREE }) {
 
   return {
     toggle: (id, on) => { show[id] = on; },
-    update, renderPip, setLights, setStatus, snapFront,
+    update, renderPip, setLights, setStatus, snapFront, renderView,
     frontCols: () => frontCols,
     stats: () => ({ ...stats, lidarHits: lidar ? lidar.hits : null }),
     takeFeed: () => { if (!feed.fresh) return null; feed.fresh = false; return { rays: feed.rays, points: feed.points, ground: feed.ground }; },

@@ -7,7 +7,9 @@ experiments/
 ├── 2026-09-17_depth-guard/           RDK + Xtion 전방 장애물 가드 (가져올 예정)
 ├── 2026-09-18_flysim-drive/          Jetson 초파리 전뇌 시뮬레이션 폐루프 주행 (가져올 예정)
 ├── 2026-10-13_vlm-drive/             Jetson + ESP32 + 깊이 카메라로 GPT · Claude 실차 운전 (Jetson 실기 점검 · 바퀴 방향까지)
-└── 2026-10-13_sfm-relocalization/    복도 SfM 지도로 카메라 위치 다시 찾기 정확도 (미완)
+├── 2026-10-13_sfm-relocalization/    복도 SfM 지도로 카메라 위치 다시 찾기 정확도 (Jetson, 진행 중)
+├── 2026-10-14_hdr-camera/            웹캠 노출 브라케팅 → 실시간 HDR 합성 (Jetson 웹 화면)
+└── 2026-10-14_fiducial-markers/      복도에 AprilTag 를 붙여 위치 바로잡기 (준비)
 ```
 
 ## 실험 폴더마다 남길 것

@@ -16,9 +16,14 @@ class Motion:
         self.link, self.odo, self.cfg = link, odo, cfg
         self.sense = sense                    # () -> 범퍼 앞 빈 거리 (m), 새 깊이 사진으로
         self.log = log
+        self.guard = None                     # () -> 멈출 까닭 (str) 또는 None — 게임패드 데드맨 (drive.py --confirm pad)
 
     def _tick(self):
-        """보고 줄 하나를 기다려 오도메트리를 갱신. 끊겼으면 예외."""
+        """보고 줄 하나를 기다려 오도메트리를 갱신. 끊겼거나 데드맨을 놓았으면 예외."""
+        if self.guard is not None:
+            why = self.guard()
+            if why:
+                raise RuntimeError(why)
         r0 = self.link.report
         t0 = time.monotonic()
         while time.monotonic() - t0 < 0.6:

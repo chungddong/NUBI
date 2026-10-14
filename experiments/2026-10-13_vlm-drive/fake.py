@@ -16,8 +16,8 @@ import numpy as np
 from depth_view import ground_from
 from xtion import Frame, intrinsics
 
-STEP_TRUE = 0.00576 * 1.02          # 실제 스텝당 거리 (설정값보다 2 % 큼)
-TRACK_TRUE = 0.82                   # 실제 유효 윤거 (설정값 0.79 와 다름)
+STEP_TRUE = 0.0059 * 1.02           # 실제 스텝당 거리 (설정값보다 2 % 큼 — 설정값은 2026-10-14 SfM 으로 잰 0.0059)
+TRACK_TRUE = 0.94                   # 실제 유효 윤거 (설정값 0.92 — 같은 날 로비 회전으로 잰 값 — 와 조금 다름)
 VMAX = 1.6                          # 듀티 1000 일 때 바퀴 속도 m/s [가정]
 STALL = 200                         # 이 듀티 밑에서는 안 돈다 (약 20 %)
 CEIL = 2.68
@@ -35,6 +35,7 @@ class FakeWheelSerial:
         self.port = "FAKE"
         self.segs, self.obstacles = segs, list(obstacles)
         self.x, self.y, self.yaw = start
+        self.yaw_total = self.yaw                  # 접지 않은 누적 방향 (보정 연습에서 '진짜 각도')
         self.timeout = 0.1
         self._in, self._out = b"", bytearray()
         self._lock = threading.Lock()
@@ -134,6 +135,7 @@ class FakeWheelSerial:
                 if not self.blocked(nx, ny):
                     self.x, self.y = nx, ny
                 self.yaw = math.atan2(math.sin(nyaw), math.cos(nyaw))
+                self.yaw_total += w * dt
                 # 실물 (2026-10-14 바퀴 점검): 앞으로 갈 때 마스터 (오른쪽) 스텝은 −, 슬레이브 (왼쪽) 는 +, 속도는 왼쪽 바퀴가 −
                 self.odo_m -= vr * dt / STEP_TRUE        # 바퀴는 막혀도 헛돈다
                 self.odo_s += vl * dt / STEP_TRUE

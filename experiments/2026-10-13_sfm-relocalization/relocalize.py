@@ -3,19 +3,25 @@
 
 For each query frame the map is built from every OTHER frame: observations from the query frame
 and its +-K temporal neighbours are removed (3D points left without observations drop out).
-The query's own SIFT keypoints/descriptors from database.db are matched to the remaining map
-descriptors (exact nearest neighbours, Lowe ratio against the nearest *other* 3D point, one match
-per 3D point), the absolute pose is estimated with LO-RANSAC PnP + refinement
-(pycolmap.estimate_and_refine_absolute_pose, known SIMPLE_RADIAL camera) and compared with the
-frame's own pose in the reconstruction. Errors are reported in metres in the hallway map frame
+The query's SIFT features are matched to the remaining map descriptors (exact nearest neighbours,
+Lowe ratio against the nearest *other* 3D point, one match per 3D point), the absolute pose is
+estimated with RANSAC PnP + LM refinement (OpenCV, known SIMPLE_RADIAL camera) and compared with
+the frame's own pose in the reconstruction. Errors are reported in metres in the hallway map frame
 (align.json): x along the corridor, y up (floor 0), z to the right when walking to the lounge.
+
+Query features (--features)
+  db      the frame's own keypoints/descriptors from database.db (what the map was built from)
+  opencv  extracted again from the frame image with OpenCV SIFT, as a live camera would be
 
 Variants
   full  the whole map
   low   rough proxy for a low robot camera: only 3D points with map height y < --low-max-y
 
-Run (data is opened read-only):
-  F:\\Develop\\mnu-campus-tour\\.venv\\Scripts\\python.exe -I relocalize.py
+numpy + OpenCV only (no pycolmap / torch), so the same script runs on the PC and on the Jetson.
+Matching runs on the CPU (OpenBLAS); limit threads with OPENBLAS_NUM_THREADS if needed.
+Data (opened read-only) is looked up in --work, $HALLWAY_SFM, <repo>/data/hallway-sfm,
+F:\\Develop\\hallway-3d\\tools\\work: sfm/model/1, sfm/database.db, align.json, frames/ (opencv only).
+  python3 relocalize.py --step 6 --ks 0,15 --tag _small
 Writes results.md, per_query.csv and error_cdf.png next to this script (or --out-dir).
 """
 from __future__ import annotations
@@ -23,19 +29,22 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import platform
 import re
-import sqlite3
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import pycolmap
-import torch
 
-WORK = Path(r"F:\Develop\hallway-3d\tools\work")
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # also under python -I
+from colmap_lite import Model, extract_sift, read_db, read_model, solve_pnp
+
 HERE = Path(__file__).resolve().parent
+WORK_CANDIDATES = [os.environ.get("HALLWAY_SFM"), HERE.parents[1] / "data" / "hallway-sfm",
+                   r"F:\Develop\hallway-3d\tools\work"]
 CORRIDOR_LAST = 118          # frames 0..118: straight corridor, 119..262: lounge loop
 FPS = 5.0
 
@@ -65,19 +74,11 @@ def load_align(path: Path):
     return to_map, s
 
 
-def load_db(path: Path):
-    """Keypoints (x, y) and SIFT descriptors per image name. Opened read-only + immutable."""
-    con = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro&immutable=1", uri=True)
-    names = dict(con.execute("SELECT image_id, name FROM images"))
-    kps, descs = {}, {}
-    for iid, rows, cols, blob in con.execute("SELECT image_id, rows, cols, data FROM keypoints"):
-        kps[names[iid]] = np.frombuffer(blob, np.float32).reshape(rows, cols)[:, :2].astype(np.float64)
-    for iid, rows, cols, blob in con.execute("SELECT image_id, rows, cols, data FROM descriptors"):
-        if cols != 128:
-            raise SystemExit(f"unexpected descriptor width {cols}")
-        descs[names[iid]] = np.frombuffer(blob, np.uint8).reshape(rows, cols)
-    con.close()
-    return kps, descs
+def find_work(arg):
+    for p in ([arg] if arg else WORK_CANDIDATES):
+        if p and (Path(p) / "sfm" / "model" / "1" / "points3D.bin").exists():
+            return Path(p)
+    raise SystemExit("SfM data not found (sfm/model/1, sfm/database.db, align.json) — give --work or set HALLWAY_SFM")
 
 
 def frame_no(name: str) -> int:
@@ -87,39 +88,32 @@ def frame_no(name: str) -> int:
 class SfmMap:
     """All observations of all 3D points with their descriptor and frame number."""
 
-    def __init__(self, rec: pycolmap.Reconstruction, kps, descs, to_map):
+    def __init__(self, rec: Model, kps, descs, to_map):
         self.rec = rec
-        self.images = {iid: im for iid, im in rec.images.items()}
+        self.images = dict(rec.images)
         self.frame_of = {iid: frame_no(im.name) for iid, im in self.images.items()}
         for iid, im in self.images.items():          # DB and model must describe the same keypoints
-            n = im.num_points2D()
+            n = len(im.xy)
             if kps[im.name].shape[0] != n:
                 raise SystemExit(f"{im.name}: {n} points2D in model vs {kps[im.name].shape[0]} keypoints in DB")
         im0 = next(iter(self.images.values()))
-        xy = np.array([p.xy for p in im0.points2D])
-        if not np.allclose(xy, kps[im0.name], atol=1e-3):
+        if not np.allclose(im0.xy, kps[im0.name], atol=1e-3):
             raise SystemExit("DB keypoints do not match model points2D (different scale?)")
 
-        self.pids = np.array(sorted(rec.points3D.keys()), np.int64)
-        index_of = {int(p): i for i, p in enumerate(self.pids)}
-        self.xyz = np.array([rec.points3D[int(p)].xyz for p in self.pids])
+        self.pids = rec.point_ids                     # sorted
+        self.xyz = rec.xyz
         self.xyz_map = to_map(self.xyz)
-        pt, img, p2d = [], [], []
-        for i, p in enumerate(self.pids):
-            for el in rec.points3D[int(p)].track.elements:
-                pt.append(i); img.append(el.image_id); p2d.append(el.point2D_idx)
-        self.obs_pt = np.array(pt, np.int64)
-        obs_img = np.array(img, np.int64)
-        obs_p2d = np.array(p2d, np.int64)
+        # observations grouped by 3D point: point i owns obs off[i]:off[i+1]
+        self.off = rec.track_off
+        self.obs_pt = np.repeat(np.arange(len(self.pids)), np.diff(self.off))
+        obs_img, obs_p2d = rec.track_img, rec.track_p2d
         self.obs_frame = np.array([self.frame_of[i] for i in obs_img], np.int64)
-        self.obs_desc = np.empty((len(pt), 128), np.uint8)
-        obs_xy = np.empty((len(pt), 2))
+        self.obs_desc = np.empty((len(obs_img), 128), np.uint8)
+        obs_xy = np.empty((len(obs_img), 2))
         for iid, im in self.images.items():
             m = obs_img == iid
             self.obs_desc[m] = descs[im.name][obs_p2d[m]]
             obs_xy[m] = kps[im.name][obs_p2d[m]]
-        # observations are grouped by 3D point (built point by point): point i owns obs off[i]:off[i+1]
-        self.off = np.concatenate([[0], np.cumsum(np.bincount(self.obs_pt, minlength=len(self.pids)))])
         # for re-triangulation: undistorted normalized coordinates and the SfM pose of each observation
         self.camera = next(iter(rec.cameras.values()))
         self.focal = float(self.camera.params[0])
@@ -127,18 +121,17 @@ class SfmMap:
         img_ids = sorted(self.images)
         k_of = {iid: k for k, iid in enumerate(img_ids)}
         self.obs_k = np.array([k_of[i] for i in obs_img], np.int64)
-        self.Rs = np.stack([self.images[i].cam_from_world().rotation.matrix() for i in img_ids])
-        self.ts = np.stack([self.images[i].cam_from_world().translation for i in img_ids])
+        self.Rs = np.stack([self.images[i].R for i in img_ids])
+        self.ts = np.stack([self.images[i].t for i in img_ids])
         self.Cs = -np.einsum("kji,kj->ki", self.Rs, self.ts)            # camera centres
         self.Cs_map = to_map(self.Cs)
         self.img_frame = np.array([self.frame_of[i] for i in img_ids], np.int64)
         # per image: which 3D point (index into self.pids) each keypoint belongs to, -1 if none
         self.own_pt = {}
         for iid, im in self.images.items():
-            own = np.full(im.num_points2D(), -1, np.int64)
-            for j, p in enumerate(im.points2D):
-                if p.has_point3D():
-                    own[j] = index_of[int(p.point3D_id)]
+            own = np.full(len(im.p3d), -1, np.int64)
+            has = im.p3d >= 0
+            own[has] = np.searchsorted(self.pids, im.p3d[has])
             self.own_pt[iid] = own
 
     def retriangulate(self, pts, frame, K, min_angle_deg=1.5, max_err_px=4.0, iters=5):
@@ -219,41 +212,41 @@ class SfmMap:
 
 # ----------------------------------------------------------------------------- matching
 class Matcher:
-    """Exact L2 nearest neighbours of query descriptors among a subset of map observations."""
+    """Exact L2 nearest neighbours of query descriptors among a subset of map observations, and the
+    exact distance to the nearest observation of any *other* 3D point (for the ratio test)."""
 
-    def __init__(self, obs_desc: np.ndarray, obs_pt: np.ndarray, device: str, topk: int, chunk: int):
-        self.dev = torch.device(device)
-        self.topk, self.chunk = topk, chunk
-        self.D = torch.from_numpy(obs_desc.astype(np.float32)).to(self.dev)
+    def __init__(self, obs_desc: np.ndarray, obs_pt: np.ndarray, chunk: int):
+        self.chunk = chunk
+        self.D = obs_desc.astype(np.float32)
         self.Dn = (self.D * self.D).sum(1)
-        self.P = torch.from_numpy(obs_pt).to(self.dev)
+        self.P = obs_pt                                   # non-decreasing: observations grouped by 3D point
 
     def match(self, q_desc: np.ndarray, valid: np.ndarray, ratio: float):
         """Returns per query descriptor: best 3D point index, its distance, ratio-test pass, and
-        whether the nearest other point was not inside the top-k (ratio then uses the k-th
-        distance, which only makes the test stricter)."""
-        sel = torch.from_numpy(np.flatnonzero(valid)).to(self.dev)
-        M, Mn, P = self.D.index_select(0, sel), self.Dn.index_select(0, sel), self.P.index_select(0, sel)
-        q = torch.from_numpy(q_desc.astype(np.float32)).to(self.dev)
+        whether no other 3D point was left in the map (then the ratio test passes trivially)."""
+        sel = np.flatnonzero(valid)
+        M, Mn, P = self.D[sel], self.Dn[sel], self.P[sel]
+        q = np.asarray(q_desc, np.float32)
         qn = (q * q).sum(1)
-        k = min(self.topk, M.shape[0])
         pts, d1s, oks, nos = [], [], [], []
         for a in range(0, q.shape[0], self.chunk):
-            qq = q[a:a + self.chunk]
-            d2 = torch.addmm(Mn[None, :], qq, M.T, beta=1.0, alpha=-2.0)
+            d2 = q[a:a + self.chunk] @ M.T                # block of squared distances, |q|^2 - 2 q.m + |m|^2
+            d2 *= -2.0
+            d2 += Mn[None, :]
             d2 += qn[a:a + self.chunk, None]
-            vals, idx = torch.topk(d2, k, dim=1, largest=False, sorted=True)
+            r = np.arange(len(d2))
+            j1 = d2.argmin(1)
+            v1 = d2[r, j1]
+            p1 = P[j1]
+            lo, hi = np.searchsorted(P, p1, "left"), np.searchsorted(P, p1, "right")
+            n = hi - lo                                   # hide every observation of the best point, then the
+            rows = np.repeat(r, n)                        # minimum left is the nearest *other* 3D point
+            d2[rows, np.repeat(lo - np.cumsum(n) + n, n) + np.arange(n.sum())] = np.inf
+            v2 = d2.min(1)
             del d2
-            vals = vals.clamp_min_(0).sqrt_()
-            cand = P[idx]
-            p1 = cand[:, 0]
-            other = cand != p1[:, None]
-            has = other.any(1)
-            j = other.to(torch.int32).argmax(1)
-            dsec = torch.where(has, vals.gather(1, j[:, None]).squeeze(1), vals[:, -1])
-            pts.append(p1); d1s.append(vals[:, 0]); oks.append(vals[:, 0] < ratio * dsec); nos.append(~has)
-        cat = lambda xs: torch.cat(xs).cpu().numpy()
-        return cat(pts), cat(d1s), cat(oks), cat(nos)
+            d1, dsec = np.sqrt(np.maximum(v1, 0)), np.sqrt(np.maximum(v2, 0))
+            pts.append(p1); d1s.append(d1); oks.append(d1 < ratio * dsec); nos.append(~np.isfinite(v2))
+        return np.concatenate(pts), np.concatenate(d1s), np.concatenate(oks), np.concatenate(nos)
 
 
 def unique_per_point(qidx, pt, d1):
@@ -271,30 +264,30 @@ def rot_angle_deg(Ra, Rb):
 
 
 def run(args):
-    if args.device == "auto":
-        args.device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.backends.cuda.matmul.allow_tf32 = False      # TF32 would blur descriptor distances
-    torch.set_float32_matmul_precision("highest")
-    if args.device == "cpu" and args.threads:
-        torch.set_num_threads(args.threads)
-    dev_name = torch.cuda.get_device_name(0) if args.device == "cuda" else f"CPU ({torch.get_num_threads()} threads)"
-
+    dev_name = f"CPU numpy ({platform.machine()}, {os.cpu_count()} cores)"
     t0 = time.perf_counter()
     to_map, scale = load_align(args.align)
-    rec = pycolmap.Reconstruction(str(args.model))
-    kps, descs = load_db(args.database)
+    rec = read_model(args.model)
+    kps, descs = read_db(args.database)
     smap = SfmMap(rec, kps, descs, to_map)
     camera = next(iter(rec.cameras.values()))
-    matcher = Matcher(smap.obs_desc, smap.obs_pt, args.device, args.topk, args.chunk)
+    matcher = Matcher(smap.obs_desc, smap.obs_pt, args.chunk)
     t_load = time.perf_counter() - t0
     low_pt = smap.xyz_map[:, 1] < args.low_max_y
     print(f"loaded in {t_load:.1f} s: {len(smap.images)} images, {len(smap.pids)} points, "
-          f"{len(smap.obs_pt)} observations, low points {int(low_pt.sum())}, device {dev_name}", flush=True)
+          f"{len(smap.obs_pt)} observations, low points {int(low_pt.sum())}, {dev_name}, "
+          f"query features {args.features}", flush=True)
 
-    est = pycolmap.AbsolutePoseEstimationOptions()
-    est.ransac.max_error = args.max_error
-    est.ransac.random_seed = args.seed
-    ref = pycolmap.AbsolutePoseRefinementOptions()
+    def query_features(im):
+        """Query keypoints (COLMAP pixel convention), descriptors, and per keypoint its SfM 3D point (or None)."""
+        if args.features == "db":
+            return kps[im.name], descs[im.name], smap.own_pt[im.id]
+        import cv2
+        img = cv2.imread(str(args.frames / im.name), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise SystemExit(f"frame not found: {args.frames / im.name}")
+        xy, d = extract_sift(img, args.sift_max_size, args.sift_features)
+        return xy, d, None
 
     by_frame = sorted(smap.images, key=lambda i: smap.frame_of[i])
     queries = by_frame[::args.step]
@@ -307,20 +300,19 @@ def run(args):
             raise SystemExit(f"unknown variant {v}; choose from {', '.join(VARIANTS)}")
     filters = [f for f in ("all", "low") if any(VARIANTS[v][0] == f for v in variants)]
 
-    # warm-up (CUDA context, kernels) so the first query's time is not inflated
-    q0 = queries[0]
-    matcher.match(descs[smap.images[q0].name], np.ones(len(smap.obs_pt), bool), args.ratio)
-
+    feats = {}                                          # query features, extracted once for all K
     rows = []
     for K in ks:
         t_block = time.perf_counter()
         for iid in queries:
             im = smap.images[iid]
             f = smap.frame_of[iid]
-            q_kp, q_desc = kps[im.name], descs[im.name]
-            own = smap.own_pt[iid]
-            Cr = to_map(im.projection_center())[0]
-            R_ref = im.cam_from_world().rotation.matrix()
+            if iid not in feats:
+                t1 = time.perf_counter()
+                feats[iid] = query_features(im) + (time.perf_counter() - t1,)
+            q_kp, q_desc, own, t_feat = feats[iid]
+            Cr = to_map(im.center)[0]
+            R_ref = im.R
             left_in = np.abs(smap.img_frame - f) > K
             nearest_cam = float(np.linalg.norm(smap.Cs_map[left_in] - Cr, axis=1).min())
             for filt in filters:
@@ -343,24 +335,23 @@ def run(args):
                     t3 = time.perf_counter()
                     res = None
                     if len(q_use) >= 4:
-                        res = pycolmap.estimate_and_refine_absolute_pose(q_kp[q_use], X_use, camera, est, ref)
+                        res = solve_pnp(q_kp[q_use], X_use, camera, max_error=args.max_error, seed=args.seed)
                     t4 = time.perf_counter()
                     row = dict(variant=variant, K=K, frame=f, part="corridor" if f <= CORRIDOR_LAST else "lounge",
                                nearest_cam_m=nearest_cam,
                                n_kp=len(q_kp), n_map_obs=int(valid.sum()), n_map_points=n_map_pts,
-                               n_own_3d=int((own >= 0).sum()),
-                               n_own_low=int(((own >= 0) & low_pt[np.maximum(own, 0)]).sum()),
+                               n_own_3d=int((own >= 0).sum()) if own is not None else -1,
+                               n_own_low=int(((own >= 0) & low_pt[np.maximum(own, 0)]).sum()) if own is not None else -1,
                                n_matches=len(qidx), n_nosecond=int(nosec.sum()),
-                               sfm_agree=float(np.mean(own[qidx] == mpt)) if len(qidx) else float("nan"),
+                               sfm_agree=float(np.mean(own[qidx] == mpt)) if len(qidx) and own is not None else float("nan"),
                                n_pnp_input=len(q_use), n_inliers=0, success=False,
                                pos_err_m=float("nan"), hor_err_m=float("nan"), rot_err_deg=float("nan"),
                                ref_x=Cr[0], ref_y=Cr[1], ref_z=Cr[2], est_x=float("nan"), est_y=float("nan"),
-                               est_z=float("nan"), t_match_ms=t_match * 1e3, t_pnp_ms=(t4 - t3) * 1e3,
-                               t_retri_ms=(t3 - t2) * 1e3)
+                               est_z=float("nan"), t_feat_ms=t_feat * 1e3, t_match_ms=t_match * 1e3,
+                               t_pnp_ms=(t4 - t3) * 1e3, t_retri_ms=(t3 - t2) * 1e3)
                     if res is not None:
-                        cfw = res["cam_from_world"]
-                        R_est = cfw.rotation.matrix()
-                        Ce = to_map(-R_est.T @ cfw.translation)[0]
+                        R_est = res["R"]
+                        Ce = to_map(-R_est.T @ res["t"])[0]
                         d = Ce - Cr
                         row.update(n_inliers=int(res["num_inliers"]),
                                    success=int(res["num_inliers"]) >= args.min_inliers,
@@ -393,7 +384,7 @@ def summarize(rows):
     ok = [r for r in rows if r["success"]]
     hor_all = np.array([r["hor_err_m"] if r["success"] else np.inf for r in rows])
     rot_all = np.array([r["rot_err_deg"] if r["success"] else np.inf for r in rows])
-    t = [r["t_match_ms"] + r["t_pnp_ms"] for r in rows]
+    t = [r["t_feat_ms"] + r["t_match_ms"] + r["t_pnp_ms"] for r in rows]
     return dict(
         n=n, n_succ=len(ok), succ_rate=len(ok) / n if n else float("nan"),
         pos_med=pct([r["pos_err_m"] for r in ok], 50), pos_p90=pct([r["pos_err_m"] for r in ok], 90),
@@ -412,6 +403,7 @@ def summarize(rows):
         r015_3=float(np.mean((hor_all <= 0.15) & (rot_all <= 3.0))),
         t_med=pct(t, 50), t_p90=pct(t, 90),
         tm_med=pct([r["t_match_ms"] for r in rows], 50), tp_med=pct([r["t_pnp_ms"] for r in rows], 50),
+        tf_med=pct([r["t_feat_ms"] for r in rows], 50),
     )
 
 
@@ -453,19 +445,23 @@ def write_results(rows, meta, args, path_md: Path):
     L.append(f"- 질의: 프레임 {meta['n_queries']}장 (매 {args.step}번째). 질의 프레임과 앞뒤 ±K 프레임의 관측을 지도에서 뺀다. "
              + "빼는 범위: " + ", ".join(f"K = {k} → ±{k / FPS:g} 초 (약 ±{k * meta['step_m']:.1f} m)" for k in ks)
              + f" (프레임 사이 이동 중앙 {meta['step_m']:.2f} m).")
-    L.append(f"- 매칭: DB의 SIFT 설명자, 정확한 최근접 (L2), 비율 검사 {args.ratio} (가장 가까운 *다른* 3D 점과 비교), "
+    feat = ("DB에 있는 그 프레임의 SIFT (지도를 만든 특징점 그대로)" if args.features == "db" else
+            f"프레임 사진에서 OpenCV SIFT로 다시 뽑음 (긴 변 {args.sift_max_size} px, 최대 {args.sift_features}개, "
+            "RootSIFT uint8 — 실제 카메라와 같은 길)")
+    L.append(f"- 질의 특징점: {feat}.")
+    L.append(f"- 매칭: 정확한 최근접 (L2, 지도 전체와 전수 비교), 비율 검사 {args.ratio} (가장 가까운 *다른* 3D 점과 비교), "
              "3D 점 하나에 질의 특징점 하나.")
     L.append("- 3D 점: '전체 지도' · '낮은 점만'은 매칭된 3D 점을 남은 프레임 (질의 ±K 밖)의 관측만으로 다시 삼각측량해서 쓴다 "
              "(SfM 카메라 자세는 고정, 2장 이상 · 삼각 각도 ≥ 1.5° · 재투영 ≤ 4 px). 'SfM 점 그대로'는 복원 모델의 점 위치를 "
              "그대로 쓴다. 그 점들은 질의 프레임까지 넣어 다듬은 것이라 오차가 거의 0으로 나온다 (비교용).")
     L.append(f"- 낮은 점만: 지도 높이 y < {args.low_max_y} m 인 3D 점의 관측만 지도에 남기고 그것과만 매칭한다 "
              "(낮은 카메라의 거친 대용, README 참고).")
-    L.append(f"- 자세: `pycolmap.estimate_and_refine_absolute_pose` (LO-RANSAC PnP + 다듬기), 재투영 허용 "
-             f"{args.max_error:g} px, 카메라는 알려진 값 (SIMPLE_RADIAL f = 943.69). "
+    L.append(f"- 자세: OpenCV `solvePnPRansac` (AP3P) → 인라이어로 `solvePnPRefineLM` 두 번, 재투영 허용 "
+             f"{args.max_error:g} px, 카메라는 알려진 값 ({meta['camera']}). "
              f"성공 = 자세가 나오고 인라이어 ≥ {args.min_inliers}.")
     L.append("- 기준: 같은 프레임의 SfM 복원 자세. 오차는 align.json으로 바꾼 지도 좌표 (m)에서 잰다. "
              "위치 = 카메라 중심 사이 거리, 수평 = x · z만, 회전 = 두 자세 사이 회전 각.")
-    L.append(f"- 계산: {meta['device']}로 매칭 (지도 전체와 전수 비교), PnP는 CPU. 질의당 시간 = 매칭 + PnP "
+    L.append(f"- 계산: {meta['device']}. 질의당 시간 = 특징점 뽑기 + 매칭 + PnP "
              f"(지도 불러오기 {meta['t_load']:.0f} s와 재삼각측량은 이 실험 방식 때문에 생긴 것이라 뺀다).")
     cmd = ("relocalize.py " + meta["argv"]).strip()
     L.append(f"- 실행: `{cmd}`, 전체 {meta['t_total']:.0f} s.")
@@ -519,12 +515,12 @@ def write_results(rows, meta, args, path_md: Path):
     L.append("## 4. 지도와 매칭 규모")
     L.append("")
     L.append("| 변형 | K | 가장 가까운 남은 지도 카메라까지 중앙 (최소) (m) | 질의마다 남은 3D 점 (중앙) | 질의 사진의 SfM 대응 중 낮은 점 (중앙) | 매칭 (중앙) "
-             "| 인라이어 (중앙) | SfM 대응과 같은 매칭 비율 (중앙) | 매칭 시간 / PnP 시간 중앙 (ms) |")
+             "| 인라이어 (중앙) | SfM 대응과 같은 매칭 비율 (중앙) | 특징점 / 매칭 / PnP 시간 중앙 (ms) |")
     L.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for v, K in combos:
         s = summarize([r for r in rows if r["variant"] == v and r["K"] == K])
         L.append(f"| {VARIANT_KO.get(v, v)} | {K} | {s['near_med']:.2f} ({s['near_min']:.2f}) | {s['map_pts_med']:,.0f} | {s['own_low_med']:.0f} | {s['match_med']:.0f} "
-                 f"| {s['inl_med']:.0f} | {s['agree_med']*100:.0f} % | {s['tm_med']:.0f} / {s['tp_med']:.0f} |")
+                 f"| {s['inl_med']:.0f} | {f2(s['agree_med'] * 100, 0)} % | {s['tf_med']:.0f} / {s['tm_med']:.0f} / {s['tp_med']:.0f} |")
     L.append("")
     L.append("'SfM 대응과 같은 매칭 비율'은 매칭된 3D 점이 복원 모델이 그 특징점에 붙인 3D 점과 같은 비율이다 "
              "(복원 모델이 3D 점을 붙이지 않은 특징점의 매칭은 틀린 것으로 센다).")
@@ -546,12 +542,20 @@ def write_csv(rows, path: Path):
 
 
 def plot_cdf(rows, path: Path):
-    import matplotlib
+    try:
+        import matplotlib
+    except ImportError:
+        print("matplotlib not installed - no error_cdf plot", flush=True)
+        return
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib import font_manager
-    if any("Malgun Gothic" in f.name for f in font_manager.fontManager.ttflist):
-        plt.rcParams["font.family"] = "Malgun Gothic"
+    names = {f.name for f in font_manager.fontManager.ttflist}
+    # Jetson: the Noto CJK .ttc files are listed under their JP face name but carry Hangul too
+    for fam in ("Malgun Gothic", "Noto Sans CJK KR", "NanumGothic", "Noto Sans CJK JP", "Noto Serif CJK JP"):
+        if fam in names:
+            plt.rcParams["font.family"] = fam
+            break
     plt.rcParams["axes.unicode_minus"] = False
     ink, ink2, grid = "#0b0b0b", "#52514e", "#e4e3df"
     colors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]          # categorical slots 1-4, fixed order
@@ -585,25 +589,26 @@ def plot_cdf(rows, path: Path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", type=Path, default=WORK / "sfm" / "model" / "1")
-    ap.add_argument("--database", type=Path, default=WORK / "sfm" / "database.db")
-    ap.add_argument("--align", type=Path, default=WORK / "align.json")
+    ap.add_argument("--work", type=Path, default=None, help="folder with sfm/, align.json, frames/")
+    ap.add_argument("--features", choices=["db", "opencv"], default="db", help="query features (see above)")
+    ap.add_argument("--sift-max-size", type=int, default=1600, help="opencv: longest image side for SIFT")
+    ap.add_argument("--sift-features", type=int, default=5000, help="opencv: max SIFT features")
     ap.add_argument("--ks", default="0,5,15,40", help="leave-out half windows in frames (5 fps)")
     ap.add_argument("--variants", default="full,low,full_sfm", help=f"any of {', '.join(VARIANTS)}")
     ap.add_argument("--step", type=int, default=1, help="use every n-th frame as a query")
     ap.add_argument("--max-queries", type=int, default=0)
     ap.add_argument("--low-max-y", type=float, default=0.8, help="'low' variant: map height limit (m)")
     ap.add_argument("--ratio", type=float, default=0.8)
-    ap.add_argument("--topk", type=int, default=32, help="neighbours kept to find the nearest other 3D point")
     ap.add_argument("--max-error", type=float, default=12.0, help="RANSAC reprojection threshold (px)")
     ap.add_argument("--min-inliers", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--device", default="auto", help="auto | cuda | cpu (descriptor matching)")
-    ap.add_argument("--threads", type=int, default=0, help="CPU threads for torch (0 = default)")
-    ap.add_argument("--chunk", type=int, default=512, help="query descriptors per distance block")
+    ap.add_argument("--chunk", type=int, default=256, help="query descriptors per distance block (256 x 250k x 4 B = 256 MB)")
     ap.add_argument("--out-dir", type=Path, default=HERE)
     ap.add_argument("--tag", default="", help="suffix for output file names, e.g. _cpu")
     args = ap.parse_args()
+    work = find_work(args.work)
+    args.model, args.database, args.align, args.frames = work / "sfm/model/1", work / "sfm/database.db", work / "align.json", work / "frames"
+    print(f"data: {work}", flush=True)
 
     t0 = time.perf_counter()
     rows, meta = run(args)
