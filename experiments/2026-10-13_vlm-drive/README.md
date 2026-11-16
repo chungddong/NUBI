@@ -42,6 +42,7 @@ Xtion Pro Live ──USB 2.0 (OpenNI2)──►  Jetson Orin Nano "dongki"  ─�
 | `replay.py` · `replay_sim.py` | **녹화 다시 돌려 보기** — 바퀴 보고 줄 + 사진으로 실차와 같은 길, 결과를 시뮬레이터 차로 움직이며 실제 웹캠 \| 3D 지도 렌더 동영상 |
 | `sim_bridge.py` | `drive.py --sim` — 바퀴는 가상 ESP32, Xtion 은 시뮬레이터 3D 지도가 그 자리에서 그린 것, 페이지 `?env=hallway&cam=xtion&bridge=1` 의 차가 따라 움직임. 웹캠 위치 인식은 실측 성능으로 흉내 |
 | `pad_confirm.py` · `drive_ctl.sh` | 실차 걸음마다 게임패드로 승인 (`drive.py --confirm pad`: START 실행 · 십자 아래 건너뜀 · SELECT 그만, 움직이는 동안 L1) · 이더넷 없이 뒤로 띄우기 |
+| `status.py` · `status_web.py` | **실차 상태 화면** — 휴대폰 · 태블릿 브라우저로 `http://<Jetson 주소>:8095/?k=<토큰>` (`drive_ctl.sh start` 가 같이 띄우고 주소를 찍는다, 토큰은 `~/.nubi_status_token`). 왼쪽은 카메라 (Xtion · 웹캠 지금 화면 0.5 s, 모델이 받은 사진, 위치 인식 사진, 지도 — 누르면 크게), 오른쪽은 인터넷 (OpenAI 연결) · Wi-Fi · 전압 · 걸음 · 위치 · 결정 · 알림 · `/tmp/drive.log` 끝. 휴대폰 세로에서는 위아래로 쌓인다. 사진에 사람이 찍히므로 주소를 돌리지 않는다 |
 
 ### 시뮬레이터와 다른 점 (Xtion)
 

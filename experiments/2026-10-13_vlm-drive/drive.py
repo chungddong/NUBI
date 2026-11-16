@@ -116,12 +116,59 @@ def main():
     out = Path(a.log_dir) / run_id
     out.mkdir(parents=True, exist_ok=True)
     print(f"목표 {goal['name']} · 모델 {a.model} ({a.effort}) · 위치 {a.pose} · 기록 {out}")
+    from status import Status
+    st = Status()                                             # 휴대폰 상태 화면 (status_web.py)
+    st.set(goal=goal["name"], model=a.model, run=run_id, step=None, decision=None, outcome=None, error=None, loc=None, pose=None)
+    st.phase("준비 중 — 카메라 · 지도 · 게임패드")
+
+    def board(r):
+        if r is not None:
+            st.set(volt=round(r.volt, 1), board_ok=bool(r.volt > 1))
 
     result = None
     vis = fusion = None
+    vis_miss = 0
+
+    def xtion_now():
+        fr = getattr(cam, "_latest", None)
+        return None if fr is None else fr.bgr
+
+    st.live({"xtion": xtion_now, "webcam": lambda: getattr(getattr(vis, "cam", None), "latest", None)})
     try:
-        r = link.wait_ready()
+        padc = None
+        if a.confirm == "pad" and not a.auto:
+            from pad_confirm import PadConfirm
+            padc = PadConfirm()
+        if a.pose == "vis" and not virtual:                   # 웹캠 · 지도는 미리 (몇 초)
+            from vision_fix import RealVision
+            vis = RealVision(cfg)
+        if padc is not None:
+            # 띄운 뒤 차를 들고 출발점으로 옮긴다 — 바닥 맞추기 · 첫 위치 · 첫 결정은 START 를 누른 뒤에 (실험실 사진으로 시작하지 않게)
+            board(link.wait_ready(need_board=False))
+            while True:
+                st.phase("준비됨 — 출발점에 두고 START = 자율 시작 · SELECT = 손 운전 · B = 그만")
+                print(f"  준비됨 — 차를 출발점 ({a.start}) 에 두고 (SELECT = 손 운전으로 옮기기) 메인보드를 켠 뒤 "
+                      "START = 자율 시작 · B = 그만", flush=True)
+                ans = padc.ask()
+                if ans == "q":
+                    raise KeyboardInterrupt
+                if ans == "m":
+                    st.phase("손 운전 — START 잡기 · L1 + 스틱 · SELECT = 자율로")
+                    if padc.manual(link, cfg) == "q":                # 손 운전 뒤 SELECT = 바로 자율 시작
+                        raise KeyboardInterrupt
+                if ans == "s":
+                    continue
+                try:
+                    r = link.wait_ready()
+                    break
+                except RuntimeError as e:
+                    print(f"  {e}", flush=True)
+                    st.set(board_ok=False, error=str(e))
+        else:
+            r = link.wait_ready()
         print(f"  바퀴 제어기 ({link.port}): 전압 {r.volt:.1f} V, 앞축 rx {r.rx}")
+        board(r)
+        st.phase("자율 시작 — 바닥 맞추기", error=None)
         if 0 < r.volt < 33.0:
             print("  !! 배터리 전압이 낮다 (10S 기준 33 V 밑)")
         f, g = setup_ground(cam, cfg)
@@ -138,9 +185,6 @@ def main():
             if virtual:
                 from sim_bridge import SimVision
                 vis = SimVision(ser, cam_off)
-            else:
-                from vision_fix import RealVision
-                vis = RealVision(cfg)
         link.arm(cfg["max_cmd"])
 
         def sense():
@@ -148,15 +192,14 @@ def main():
             return 0.0 if f is None else an.analyze(f.depth, cfg["blind_frac"])["gap_ahead"]   # 깊이가 안 오면 막힘
 
         motion = Motion(link, odo, cfg, sense)
-        padc = None
-        if a.confirm == "pad" and not a.auto:
-            from pad_confirm import PadConfirm
-            padc = PadConfirm()
+        if padc is not None:
             motion.guard = padc.guard
         motion._settle(0.4)                                   # 오도메트리 기준점
 
         history, memory = [], ""
         for step in range(1, a.max_steps + 1):
+            st.set(step=step, decision=None, outcome=None)
+            board(link.report)
             f = cam.read()
             if f is None:
                 print("카메라 프레임이 안 온다 — 멈춤")
@@ -164,16 +207,27 @@ def main():
             view = an.analyze(f.depth, cfg["blind_frac"])
             cands = candidates(view["cols"])
             img = draw_arrows(f.bgr, cands, f.K, g)
-            if vis is not None:                               # 멈춰 있을 때 웹캠으로 위치를 찾아 오도메트리에 섞는다
+            st.image("xtion", img)
+            if vis is not None:
+                st.phase(f"#{step} 위치 인식 중")                               # 멈춰 있을 때 웹캠으로 위치를 찾아 오도메트리에 섞는다
                 fusion.record(time.monotonic())
-                prior = fusion.cam_from_base(odo.x, odo.y, odo.yaw) if fusion.n_fix and fusion.rejects < fusion.lost_after else None
-                fx = vis.locate(prior)
+                # 출발점 (--start) 이나 지금 추정 근처 지도만 (1 s). 길을 잃었거나 3 번 연속 못 찾으면 지도 전체 (8 s) 를 한 번
+                use_prior = fusion.rejects < fusion.lost_after and vis_miss < 3
+                fx = vis.locate(fusion.cam_from_base(odo.x, odo.y, odo.yaw) if use_prior else None)
+                vis_miss = 0 if (fx is not None or not use_prior) else vis_miss + 1
+                if getattr(vis, "last_img", None) is not None:
+                    st.image("webcam", vis.last_img)
                 if fx is None:
-                    print("  위치 인식: 못 찾음 — 오도메트리로")
+                    print("  위치 인식: 못 찾음 — 오도메트리로" + ("" if use_prior else " (지도 전체로도)"))
+                    li = getattr(vis, "last", {}) or {}
+                    st.set(loc=dict(ok=False, text=f"못 찾음 (인라이어 {li.get('inliers', 0)}) — 오도메트리로"))
                 else:
                     ok, why, inn = fusion.fix(fx["t"], fx["x"], fx["y"], fx["yaw"])
                     print(f"  위치 인식: {why} (인라이어 {fx['inliers']}, 차이 {math.hypot(inn[0], inn[1]):.2f} m {inn[2]:+.0f}°, {fx['ms']:.0f} ms)")
+                    st.set(loc=dict(ok=ok, text=f"{why} · 인라이어 {fx['inliers']} · 차이 {math.hypot(inn[0], inn[1]):.2f} m"))
             pose = odo.pose() if a.pose in ("odom", "vis") else None
+            if pose:
+                st.set(pose=dict(x=pose["x"], y=pose["y"], yaw_deg=math.degrees(pose["yaw"])))
             map_url = map_text = map_im = None
             if a.pose != "none":
                 if pose:
@@ -185,30 +239,62 @@ def main():
             cv2.imwrite(str(out / f"{step:02d}_cam.jpg"), img)
             if map_im:
                 map_im.save(out / f"{step:02d}_map.png")
+                st.image("map", map_im)
             req = {"run": run_id, "step": step, "max_steps": a.max_steps, "model": a.model, "effort": a.effort,
                    "goal": goal["name"], "camera": cam_text, "directory": "" if a.no_directory else hm.directory(), "candidates": cands,
                    "history": history[-8:], "memory": memory, "image": jpeg_data_url(img), "map_image": map_url,
                    "map_text": map_text, "truth": {"x": ser.x, "y": ser.y, "yaw": ser.yaw} if virtual else None}
             print(f"\n#{step}  화살표 " + "  ".join(f"{c['id']}:{c['deg']:+d}°/{c['free']:.1f}m" + ("(사각)" if c["blind"] else "") for c in cands)
                   + (f"  | 추정 ({pose['x']:.2f}, {pose['y']:.2f}) {math.degrees(pose['yaw']):+.0f}° ±{pose['sigma']:.2f}" if pose else ""))
-            t0 = time.monotonic()
-            res = driver.step(req)
+            while True:                                       # 모델 호출 — 실패하면 화면에 띄우고 다시 (START) 또는 그만 (B)
+                st.phase(f"#{step} {a.model} 생각 중", error=None)
+                t0 = time.monotonic()
+                try:
+                    res = driver.step(req)
+                except Exception as e:                        # 인터넷 끊김 등
+                    res = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+                if res.get("ok"):
+                    break
+                print("  오류:", res.get("error"), flush=True)
+                st.phase("모델 호출 실패 — START = 다시 · B = 그만", error=str(res.get("error"))[:300])
+                if padc is None or a.auto:
+                    break
+                ans = padc.ask()
+                while ans == "m":                             # 손 운전은 실패 중에도 된다
+                    st.phase("손 운전 — START 잡기 · L1 + 스틱 · SELECT = 돌아가기")
+                    if padc.manual(link, cfg, odo, fusion) == "q":
+                        ans = "q"
+                        break
+                    link.arm(cfg["max_cmd"])
+                    st.phase("모델 호출 실패 — START = 다시 · B = 그만")
+                    ans = padc.ask()
+                if ans == "q":
+                    break
             if not res.get("ok"):
-                print("  오류:", res.get("error"))
                 break
             d = res["decision"]
             print(f"  ({time.monotonic() - t0:.1f} s, ${res['usage']['usd']:.4f}) 보임: {d['observation']}\n  까닭: {d['reason']}\n  메모: {d['memory']}")
             what = (f"가기 {d['arrow']}번 {d['distance_m']:.1f} m" if d["action"] == "move" else "멈춤" if d["action"] == "stop"
                     else f"{'왼쪽' if d['action'] == 'turn_left' else '오른쪽'} {d['turn_deg']:.0f}°")
             print(f"  → {what}")
+            st.set(decision=dict(what=what, reason=d.get("reason", ""), observation=d.get("observation", "")),
+                   latency_s=round(time.monotonic() - t0, 1), error=None)
             if bridge is not None:
                 est = f"추정 ({pose['x']:.2f}, {pose['y']:.2f}) {math.degrees(pose['yaw']):+.0f}°" if pose else "추정 없음"
                 bridge.note = (f"#{step} {a.model}: {what}\n{est} · 진짜 ({ser.x:.2f}, {ser.y:.2f}) {math.degrees(ser.yaw):+.0f}°"
                                f" · 목표 {goal['name']}")
             if not a.auto and d["action"] != "stop":
                 if padc is not None:
-                    print("  게임패드: L1 을 누른 채 START = 실행 · 십자 아래 = 건너뜀 · SELECT = 그만", flush=True)
+                    print("  자율 — 기다림: L1 을 누른 채 START = 실행 · 십자 아래 = 건너뜀 · SELECT = 손 운전 · B = 그만", flush=True)
+                    st.phase(f"#{step} 승인 기다림 — L1 + START = 실행 ({what}) · SELECT = 손 운전 · B = 그만")
                     ans = padc.ask()
+                    if ans == "m":                               # 손으로 옮긴 뒤 SELECT → 이 결정은 버리고 다음 걸음 (새 사진 · 위치)
+                        st.phase("손 운전 — START 잡기 · L1 + 스틱 · SELECT = 자율로")
+                        if padc.manual(link, cfg, odo, fusion) == "q":
+                            break
+                        link.arm(cfg["max_cmd"])                 # 손 운전을 놓을 때 워치독을 껐다 — 다시 켠다
+                        history.append(f"걸음 {step}: {what} → 사람이 손으로 옮김")
+                        continue
                 else:
                     ans = input("  Enter = 실행 · s = 건너뜀 · q = 그만 > ").strip().lower()
                 if ans == "q":
@@ -216,8 +302,10 @@ def main():
                 if ans == "s":
                     history.append(f"걸음 {step}: {what} → 사람이 건너뜀")
                     continue
+            st.phase(f"#{step} 실행 중 — {what}")
             outcome = execute(d, cands, motion, cfg)
             print(f"  결과: {outcome}")
+            st.set(outcome=outcome)
             history.append(f"걸음 {step}: {what} → {outcome}")
             memory = d["memory"]
             rec = {k: v for k, v in req.items() if k not in ("image", "map_image")}
@@ -231,7 +319,11 @@ def main():
                 break
     except KeyboardInterrupt:
         print("\n멈춤 (Ctrl+C)")
+    except Exception as e:                                    # 상태 화면에 남기고 그대로 올린다
+        st.phase("오류로 끝남", error=f"{type(e).__name__}: {e}"[:300])
+        raise
     finally:
+        st.phase(f"끝 ({result or '중단'})")
         link.close()
         cam.close()
         if vis is not None and hasattr(vis, "close"):

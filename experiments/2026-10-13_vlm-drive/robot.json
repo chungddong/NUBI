@@ -29,5 +29,14 @@
   "webcam_x_m": 0.35,
   "webcam_y_m": 0.0,
   "webcam_yaw_deg": 5.5,
-  "webcam_hfov_deg": 70.0
+  "webcam_hfov_deg": 70.0,
+  "webcam_intrinsics_sfm": {
+    "width": 1280,
+    "f": 1093.75,
+    "cx": 640,
+    "cy": 360,
+    "k": -0.3267,
+    "source": "2026-10-15 차 높이 SfM (GLOMAP) — SIMPLE_RADIAL",
+    "note": "쓰지 않음 — 기존 지도와 맞출 때 인라이어가 줄었다 (2026-10-15). 쓰려면 이름을 webcam_intrinsics 로"
+  }
 }

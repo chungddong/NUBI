@@ -31,8 +31,19 @@ def pinhole(w, h, fx, fy=None, cx=None, cy=None):
     return Camera(0, "PINHOLE", w, h, np.array([fx, fy or fx, w / 2 if cx is None else cx, h / 2 if cy is None else cy]))
 
 
+def webcam_camera(cfg, w, h):
+    """robot.json 의 웹캠 내부값 — webcam_intrinsics (SfM 으로 잰 SIMPLE_RADIAL) 가 있으면 그것, 없으면 가로 화각 핀홀."""
+    k = cfg.get("webcam_intrinsics")
+    if k:
+        s = w / k["width"]
+        return Camera(0, "SIMPLE_RADIAL", w, h, np.array([k["f"] * s, k["cx"] * s, k["cy"] * s, k["k"]]))
+    hfov = cfg.get("webcam_hfov_deg", 70.0)
+    return pinhole(w, h, (w / 2) / math.tan(math.radians(hfov) / 2))
+
+
 class Localizer:
-    def __init__(self, work=None, radius_m=6.0, max_turn_deg=70.0, chunk=256):
+    def __init__(self, work=None, radius_m=6.0, max_turn_deg=70.0, chunk=256, exclude=()):
+        """exclude: 이름이 이것으로 시작하는 지도 사진의 관측은 쓰지 않는다 (녹화 하나를 빼고 시험 — 지도를 만든 녹화로 잴 때)."""
         t0 = time.perf_counter()
         work = find_work(work)
         self.to_map, _ = load_align(work / "align.json")
@@ -49,15 +60,18 @@ class Localizer:
         self.img_yaw = np.degrees(np.arctan2(-f[:, 2], f[:, 0]))
         self.radius, self.max_turn = radius_m, max_turn_deg
         self.n_obs = len(sm.obs_pt)
+        names = [sm.images[i].name for i in sorted(sm.images)]
+        self.keep_img = np.array([not any(n.startswith(p) for p in exclude) for n in names])
+        self.n_excluded = int((~self.keep_img).sum())
         self.t_load = time.perf_counter() - t0
 
     def _valid(self, prior):
         if prior is None:
-            return np.ones(self.n_obs, bool), len(self.img_xy)
+            return self.keep_img[self.obs_k], int(self.keep_img.sum())
         x, y, yaw = prior
         d = np.hypot(self.img_xy[:, 0] - x, self.img_xy[:, 1] - y)
         turn = np.abs((self.img_yaw - yaw + 180) % 360 - 180)
-        imgs = (d < self.radius) & (turn < self.max_turn)
+        imgs = (d < self.radius) & (turn < self.max_turn) & self.keep_img
         return imgs[self.obs_k], int(imgs.sum())
 
     def locate(self, bgr, cam: Camera, prior=None, min_inliers=25, max_error=8.0, ratio=0.8, h_range=None):

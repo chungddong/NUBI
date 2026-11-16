@@ -35,9 +35,12 @@ def main():
     ap.add_argument("--track", type=float, help="track_eff_m")
     ap.add_argument("--min-inliers", type=int, default=25)
     ap.add_argument("--global-every", type=float, default=5.0, help="길 잃었을 때 지도 전체 검색은 몇 초에 한 번")
+    ap.add_argument("--map", type=Path, help="SfM 지도 폴더 (sfm/model/1 · sfm/database.db · align.json), 기본: 사람 손 복도 지도")
+    ap.add_argument("--exclude-run", action="store_true", help="지도에서 이 녹화의 사진을 뺀다 (차 높이 지도를 만든 녹화로 잴 때)")
+    ap.add_argument("--tag", default="", help="결과 파일 이름 뒤에")
     a = ap.parse_args()
 
-    from localizer import Localizer, pinhole
+    from localizer import Localizer, pinhole, webcam_camera
     cfg = json.loads((HERE / "robot.json").read_text(encoding="utf-8"))
     if a.m_per_step:
         cfg["m_per_step"] = a.m_per_step
@@ -46,8 +49,7 @@ def main():
     meta = json.loads((a.run / "meta.json").read_text(encoding="utf-8"))
     w, h = meta[a.camera]["size"]
     if a.camera == "webcam":
-        hfov = cfg.get("webcam_hfov_deg", 70.0)
-        cam = pinhole(w, h, (w / 2) / math.tan(math.radians(hfov) / 2))
+        cam = webcam_camera(cfg, w, h)
         off = (cfg.get("webcam_x_m", 0.35), cfg.get("webcam_y_m", 0.0), cfg.get("webcam_yaw_deg", 0.0))
     else:
         fx, fy, cx, cy = meta["xtion"]["K_fx_fy_cx_cy"]
@@ -63,8 +65,8 @@ def main():
     print(f"사진 {len(ftimes)} 장 · 보고 줄 {len(wheels)} 개 · m_per_step {cfg['m_per_step']} · track_eff_m {cfg['track_eff_m']} · "
           f"카메라 위치 {off}", flush=True)
 
-    loc = Localizer()
-    print(f"지도 불러옴 {loc.t_load:.1f} s", flush=True)
+    loc = Localizer(a.map, exclude=(a.run.name.split("_")[-1] + "_",) if a.exclude_run else ())
+    print(f"지도 불러옴 {loc.t_load:.1f} s" + (f" · 이 녹화 사진 {loc.n_excluded} 장은 뺌" if loc.n_excluded else ""), flush=True)
     odo = Odometry(cfg)                      # 섞는 쪽
     raw = Odometry(cfg)                      # 오도메트리만 (첫 고정에서 시작)
     fu = PoseFusion(odo, cam_off=off)
@@ -114,14 +116,14 @@ def main():
                          innov_m=round(math.hypot(innov[0], innov[1]), 3) if res["ok"] else "", ms=round(res["ms"])))
         print(f"  t {t:6.1f}  {why:14s}  인라이어 {res['inliers']:3d}  {'근처 ' + str(res['map_images']) + '장' if res['prior'] else '전체'}  "
               f"→ ({odo.x:6.2f}, {odo.y:5.2f}, {math.degrees(odo.yaw):6.1f}°)  {res['ms']:.0f} ms", flush=True)
-    with open(a.run / "replay.csv", "w", newline="", encoding="utf-8") as fh:
+    with open(a.run / f"replay{a.tag}.csv", "w", newline="", encoding="utf-8") as fh:
         wcsv = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
         wcsv.writeheader()
         wcsv.writerows(rows)
     ms = sorted(stats.pop("ms"))
     stats.update(ms_median=ms[len(ms) // 2] if ms else None, m_per_step=cfg["m_per_step"], track_eff_m=cfg["track_eff_m"],
                  cam_off=off, camera=a.camera)
-    (a.run / "replay_summary.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
+    (a.run / f"replay_summary{a.tag}.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(stats, ensure_ascii=False), flush=True)
 
 

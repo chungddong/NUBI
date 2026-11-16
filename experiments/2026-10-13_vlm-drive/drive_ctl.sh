@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 실차 운전 (drive.py) 을 Jetson 에서 뒤로 띄운다 — 게임패드로 승인하며 (이더넷을 뽑고 따라가도 계속 돈다).
-#   bash drive_ctl.sh start [drive.py 옵션]   기본: --pose vis --confirm pad --model gpt-6-luna --goal 310앞
+#   bash drive_ctl.sh start [drive.py 옵션]   기본: --pose vis --confirm pad --model gpt-6.1-sol --goal 310앞
 #   bash drive_ctl.sh stop | status | log      기록: /tmp/drive.log (걸음마다 사진 · 결정은 data/logs/vlm-drive/)
+#   bash drive_ctl.sh web                      상태 화면만 (status_web.py, :8095, 토큰 ~/.nubi_status_token) — start 도 같이 띄운다
 # 손 운전 (pad.py) 이 시리얼 포트를 쥐고 있으면 먼저 끈다. 끄기는 SIGTERM (drive.py 가 바퀴를 세우고 w 0 으로 끝낸다).
 cd "$(dirname "$0")"
 PAT="python3 -u drive.py"
@@ -18,10 +19,22 @@ case "${1:-status}" in
     pgrep -f "pad.py drive" >/dev/null && { [ -f pad_ctl.sh ] && bash pad_ctl.sh stop || pkill -TERM -f "pad.py drive"; sleep 1; }
     pgrep -f "python3 -u record.py" >/dev/null && bash record_ctl.sh stop
     args=("${@:2}")
-    [ ${#args[@]} -eq 0 ] && args=(--pose vis --confirm pad --model gpt-6-luna --goal 310앞)
+    [ ${#args[@]} -eq 0 ] && args=(--pose vis --confirm pad --model gpt-6.1-sol --goal 310앞)
+    if ! pgrep -f "python3 -u status_web[.]py" >/dev/null; then nohup python3 -u status_web.py > /tmp/status_web.log 2>&1 < /dev/null & fi
     nohup python3 -u drive.py "${args[@]}" > /tmp/drive.log 2>&1 < /dev/null &
     sleep 12
-    cat /tmp/drive.log ;;
+    cat /tmp/drive.log
+    tok=$(cat ~/.nubi_status_token 2>/dev/null)
+    for ip in $(ip -4 -o addr | awk '$2 != "lo" && $2 != "docker0" {split($4, a, "/"); print a[1]}'); do
+      echo "상태 화면: http://$ip:8095/?k=$tok"
+    done ;;
+  web)
+    if ! pgrep -f "python3 -u status_web[.]py" >/dev/null; then nohup python3 -u status_web.py > /tmp/status_web.log 2>&1 < /dev/null & fi
+    sleep 2
+    tok=$(cat ~/.nubi_status_token 2>/dev/null)
+    for ip in $(ip -4 -o addr | awk '$2 != "lo" && $2 != "docker0" {split($4, a, "/"); print a[1]}'); do
+      echo "상태 화면: http://$ip:8095/?k=$tok"
+    done ;;
   log)
     tail -40 /tmp/drive.log ;;
   *)
