@@ -168,6 +168,8 @@ copy include\wifi_config.example.h include\wifi_config.h
 | 09-17 ~ 09-22 | 탱크 모드 · 데드밴드, RDK 장애물 가드, Jetson 초파리 뇌 폐루프 주행, 메인보드 커스텀 펌웨어 | [9월 일지](docs/worklog/2026-09.md) |
 | 10-04 ~ 10-05 | 차체 재설계 v01 ~ v29: 실외 외관, 실부품 선정(D-01 ~ D-21), 웹 시뮬레이터, 내부 배선 | [10월 일지](docs/worklog/2026-10.md) |
 | 10-13 | 누비 통합 저장소. 믹싱을 ESP32로 옮겨 네 바퀴 시험(바퀴 띄움), MIT 공개 준비 | [10월 일지](docs/worklog/2026-10.md) |
+| 10-14 ~ 10-16 | 실차 점검 · 게임패드 조종, 웹캠 SfM으로 위치 찾기(차 높이 양방향 지도), 실차 GPT 운전 상태 화면 | [10월 일지](docs/worklog/2026-10.md) |
+| 11-05 | 교내 공학 페스티벌 전시 덱 초안 ([docs/presentations](docs/presentations/2026-11_eng-fest/README.md)) | [11월 일지](docs/worklog/2026-11.md) |
 
 ## 작업 규칙
 
