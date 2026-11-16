@@ -170,6 +170,7 @@ copy include\wifi_config.example.h include\wifi_config.h
 | 10-13 | 누비 통합 저장소. 믹싱을 ESP32로 옮겨 네 바퀴 시험(바퀴 띄움), MIT 공개 준비 | [10월 일지](docs/worklog/2026-10.md) |
 | 10-14 ~ 10-16 | 실차 점검 · 게임패드 조종, 웹캠 SfM으로 위치 찾기(차 높이 양방향 지도), 실차 GPT 운전 상태 화면 | [10월 일지](docs/worklog/2026-10.md) |
 | 11-05 | 교내 공학 페스티벌 전시 덱 초안 ([docs/presentations](docs/presentations/2026-11_eng-fest/README.md)) | [11월 일지](docs/worklog/2026-11.md) |
+| 11-16 | 라즈베리파이로 게임패드 조종 옮기기 — 네 바퀴, 부팅하면 패드 운전 자동 실행 | [11월 일지](docs/worklog/2026-11.md) |
 
 ## 작업 규칙
 

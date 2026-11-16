@@ -9,9 +9,13 @@
 # 시리얼은 한 프로그램만 연다 (open_serial 이 잠금) — bench.py 가 돌고 있으면 먼저 bench_ctl.sh stop.
 # 기록을 /tmp 에 두면 재부팅 때 지워진다 (2026-10-14 밖에서 몬 기록을 그렇게 잃었다). Jetson 은 시계 배터리가 없어
 # 네트워크 없이 켜면 시각이 마지막 저장 시각부터 가므로, 고리를 시작할 때 시계 동기화 여부를 같이 적는다.
+# Pi (chungpi, 2026-11-16) 도 같다. 이 폴더에 .venv 가 있으면 그 파이썬을 쓴다 (Pi 는 pyserial · numpy 를 venv 에 깔았다).
+# 부팅 자동 실행에 운전 옵션을 넘기려면 install 뒤에 붙인다:  bash pad_ctl.sh install --level 100
 cd "$(dirname "$0")"
 LOOP="pad_ctl.sh loop"
-PAT="python3 -u pad.py"
+PY=python3
+[ -x .venv/bin/python ] && PY=.venv/bin/python
+PAT="python[0-9.]* -u pad[.]py drive"                  # [.] — pkill 이 이 패턴을 담은 ssh 셸까지 죽이지 않게
 LOG_DIR="$(cd ../.. && pwd)/data/logs/pad"
 LOG="$LOG_DIR/pad.log"
 mkdir -p "$LOG_DIR"
@@ -25,7 +29,7 @@ case "${1:-status}" in
   loop)
     echo "=== $(date '+%F %T') 고리 시작 · 부팅 $(uptime -s) · 시계 동기화 $(timedatectl show -p NTPSynchronized --value 2>/dev/null) ==="
     while true; do
-      python3 -u pad.py drive "${@:2}"
+      "$PY" -u pad.py drive "${@:2}"
       echo "$(date +%T) pad.py 끝남 (코드 $?) — 3 s 뒤 다시"
       sleep 3
     done ;;
@@ -38,7 +42,7 @@ case "${1:-status}" in
     sleep 4
     tail -5 "$LOG" ;;
   install)
-    (crontab -l 2>/dev/null | grep -v "pad_ctl.sh"; echo "@reboot bash $PWD/pad_ctl.sh start") | crontab -
+    (crontab -l 2>/dev/null | grep -v "pad_ctl.sh"; echo "@reboot bash $PWD/pad_ctl.sh start ${*:2}") | crontab -
     crontab -l | grep pad_ctl ;;
   uninstall)
     crontab -l 2>/dev/null | grep -v "pad_ctl.sh" | crontab -
